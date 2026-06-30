@@ -296,82 +296,93 @@ export default function App() {
         )}
 
         {/* View Router */}
-        <div className="flex-1 flex overflow-hidden">
-          {activeTab === "dashboard" && (
-            <DashboardView 
-              data={dashboardData} 
-              loading={loading} 
-              onNavigate={handleNavigate}
-              onSelectInvoice={handleSelectInvoiceAndNavigate}
-              invoices={invoices}
-              customers={customers}
-              currency={currency}
-            />
-          )}
+        <div className="flex-1 flex overflow-hidden relative">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+              className="flex-1 flex overflow-hidden w-full"
+            >
+              {activeTab === "dashboard" && (
+                <DashboardView 
+                  data={dashboardData} 
+                  loading={loading} 
+                  onNavigate={handleNavigate}
+                  onSelectInvoice={handleSelectInvoiceAndNavigate}
+                  invoices={invoices}
+                  customers={customers}
+                  currency={currency}
+                />
+              )}
 
-          {activeTab === "invoices" && (
-            <InvoicesView 
-              invoices={invoices} 
-              customers={customers}
-              loading={loading}
-              onInvoiceCreated={triggerRefresh}
-              selectedInvoice={selectedInvoice}
-              setSelectedInvoice={setSelectedInvoice}
-              onSelectInvoice={setSelectedInvoice}
-              showToast={showToast}
-              currency={currency}
-            />
-          )}
+              {activeTab === "invoices" && (
+                <InvoicesView 
+                  invoices={invoices} 
+                  customers={customers}
+                  loading={loading}
+                  onInvoiceCreated={triggerRefresh}
+                  selectedInvoice={selectedInvoice}
+                  setSelectedInvoice={setSelectedInvoice}
+                  onSelectInvoice={setSelectedInvoice}
+                  showToast={showToast}
+                  currency={currency}
+                />
+              )}
 
-          {activeTab === "customers" && (
-            <CustomersView 
-              customers={customers} 
-              loading={loading}
-              onCustomerAdded={triggerRefresh}
-              selectedCustomer={selectedCustomer}
-              setSelectedCustomer={setSelectedCustomer}
-              showToast={showToast}
-              currency={currency}
-            />
-          )}
+              {activeTab === "customers" && (
+                <CustomersView 
+                  customers={customers} 
+                  loading={loading}
+                  onCustomerAdded={triggerRefresh}
+                  selectedCustomer={selectedCustomer}
+                  setSelectedCustomer={setSelectedCustomer}
+                  showToast={showToast}
+                  currency={currency}
+                />
+              )}
 
-          {activeTab === "debts" && (
-            <DebtsView 
-              customers={customers} 
-              loading={loading}
-              onPaymentRecorded={triggerRefresh}
-              currency={currency}
-            />
-          )}
+              {activeTab === "debts" && (
+                <DebtsView 
+                  customers={customers} 
+                  loading={loading}
+                  onPaymentRecorded={triggerRefresh}
+                  currency={currency}
+                />
+              )}
 
-          {activeTab === "reports" && (
-            <ReportsView 
-              customers={customers} 
-              invoices={invoices} 
-              loading={loading}
-              onInvoiceUpdated={triggerRefresh}
-              showToast={showToast}
-              currency={currency}
-            />
-          )}
+              {activeTab === "reports" && (
+                <ReportsView 
+                  customers={customers} 
+                  invoices={invoices} 
+                  loading={loading}
+                  onInvoiceUpdated={triggerRefresh}
+                  showToast={showToast}
+                  currency={currency}
+                />
+              )}
 
-          {activeTab === "admin_panel" && currentUser.role === "admin" && (
-            <AdminPanelView 
-              currentUser={currentUser}
-              onResetDB={handleResetDatabase}
-              showToast={showToast}
-            />
-          )}
+              {activeTab === "admin_panel" && currentUser.role === "admin" && (
+                <AdminPanelView 
+                  currentUser={currentUser}
+                  onResetDB={handleResetDatabase}
+                  showToast={showToast}
+                />
+              )}
 
-          {activeTab === "settings" && (
-            <SettingsView 
-              onResetDB={handleResetDatabase}
-              currency={currency}
-              userInfo={userInfo}
-              onUpdateSettings={updateSettings}
-              showToast={showToast}
-            />
-          )}
+              {activeTab === "settings" && (
+                <SettingsView 
+                  onResetDB={handleResetDatabase}
+                  currency={currency}
+                  userInfo={userInfo}
+                  onUpdateSettings={updateSettings}
+                  showToast={showToast}
+                />
+              )}
+            </motion.div>
+          </AnimatePresence>
         </div>
       </main>
 
