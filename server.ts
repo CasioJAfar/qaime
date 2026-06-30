@@ -69,11 +69,18 @@ interface LogEntry {
   timestamp: string;
 }
 
+interface User {
+  username: string;
+  password?: string;
+  role: "admin" | "user";
+}
+
 interface DBState {
   invoices: Invoice[];
   customers: Customer[];
   payments: Payment[];
   logs?: LogEntry[];
+  users?: User[];
 }
 
 // Initial Sample Data in Azerbaijani
@@ -227,14 +234,33 @@ function readDB(): DBState {
   try {
     if (fs.existsSync(DB_FILE)) {
       const content = fs.readFileSync(DB_FILE, "utf-8");
-      return JSON.parse(content) as DBState;
+      const db = JSON.parse(content) as DBState;
+      
+      // Migrate existing db to support users if missing
+      if (!db.users || db.users.length === 0) {
+        db.users = [
+          { username: "admin", password: "195", role: "admin" },
+          { username: "user", password: "user", role: "user" },
+          { username: "cefer", password: "1", role: "user" }
+        ];
+        writeDB(db);
+      }
+      return db;
     }
   } catch (error) {
     console.error("DB Oxunmasında xəta:", error);
   }
   // Initialize and write seed data
-  writeDB(initialDB);
-  return initialDB;
+  const seedDB: DBState = {
+    ...initialDB,
+    users: [
+      { username: "admin", password: "195", role: "admin" },
+      { username: "user", password: "user", role: "user" },
+      { username: "cefer", password: "1", role: "user" }
+    ] as User[]
+  };
+  writeDB(seedDB);
+  return seedDB;
 }
 
 // Helper to write database state
@@ -320,12 +346,68 @@ function normalizeCustomerName(name: string): string {
 app.post("/api/login", (req, res) => {
   const { username, password } = req.body;
   const normalizedUsername = (username || "").toLowerCase().trim();
-  if (normalizedUsername === "admin" && password === "195") {
-    res.json({ success: true, role: "admin", username: "admin" });
-  } else if (normalizedUsername === "user" && password === "user") {
-    res.json({ success: true, role: "user", username: "user" });
+  const db = readDB();
+  const users = db.users || [];
+  
+  const matchedUser = users.find(u => u.username.toLowerCase().trim() === normalizedUsername && u.password === password);
+  
+  if (matchedUser) {
+    res.json({ success: true, role: matchedUser.role, username: matchedUser.username });
   } else {
     res.status(401).json({ error: "İstifadəçi adı və ya şifrə yanlışdır." });
+  }
+});
+
+// Users list for admin
+app.get("/api/users", adminOnly, (req, res) => {
+  const db = readDB();
+  const users = db.users || [];
+  res.json(users.map(u => ({ username: u.username, role: u.role })));
+});
+
+// Update user role by admin
+app.post("/api/users/:username/role", adminOnly, (req, res) => {
+  const { username } = req.params;
+  const { role } = req.body;
+  if (role !== "admin" && role !== "user") {
+    return res.status(400).json({ error: "Yanlış rol təyin edildi." });
+  }
+  const db = readDB();
+  if (!db.users) db.users = [];
+  
+  const user = db.users.find(u => u.username.toLowerCase().trim() === username.toLowerCase().trim());
+  if (!user) {
+    return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+  }
+  
+  const oldRole = user.role;
+  user.role = role;
+  writeDB(db);
+  
+  addLog("user_role_updated", `İstifadəçi "${user.username}" rolu dəyişdirildi: ${oldRole} -> ${role}`, req);
+  res.json({ success: true, username: user.username, role: user.role });
+});
+
+// Backup/Restore API
+app.get("/api/backup", adminOnly, (req, res) => {
+  const db = readDB();
+  res.setHeader("Content-Disposition", "attachment; filename=erp_backup.json");
+  res.setHeader("Content-Type", "application/json");
+  res.json(db);
+  addLog("backup_download", "Məlumatların ehtiyat nüsxəsi (JSON) yükləndi", req);
+});
+
+app.post("/api/restore", adminOnly, (req, res) => {
+  try {
+    const backupData = req.body;
+    if (!backupData || !Array.isArray(backupData.customers) || !Array.isArray(backupData.invoices)) {
+      return res.status(400).json({ error: "Yanlış ehtiyat nüsxə formatı." });
+    }
+    writeDB(backupData);
+    addLog("backup_restore", "Məlumatlar ehtiyat nüsxədən (JSON) bərpa edildi", req);
+    res.json({ success: true, message: "Məlumatlar uğurla bərpa edildi." });
+  } catch (error) {
+    res.status(500).json({ error: "Bərpa zamanı xəta baş verdi." });
   }
 });
 

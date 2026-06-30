@@ -222,6 +222,102 @@ export default function SettingsView({ onResetDB, currency, userInfo, onUpdateSe
             )}
           </div>
 
+          {/* Backup & Restore Section */}
+          <div className="space-y-3 border-t border-slate-100 pt-5">
+            <h3 className="text-sm font-semibold text-slate-800 flex items-center space-x-2">
+              <Database className="w-4 h-4 text-emerald-600" />
+              <span>Ehtiyat Nüsxə və Bərpa (Backup / Restore)</span>
+            </h3>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Sistemdəki bütün məlumatları (qaimələr, müştərilər, borclar) JSON formatında kompüterinizə yükləyərək pulsuz yadda saxlaya və ya əvvəlcədən yüklədiyiniz nüsxəni geri bərpa edə bilərsiniz.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
+              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 flex flex-col justify-between items-start space-y-3">
+                <div>
+                  <span className="font-bold text-xs text-emerald-900 block mb-1">Məlumatları Yüklə (Backup)</span>
+                  <p className="text-[10px] text-emerald-700/80 leading-relaxed">Bütün sistemi JSON formatında cihazınıza yükləyir. Təhlükəsizlik üçün periyodik olaraq nüsxə çıxarmağınız tövsiyə olunur.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const savedUser = localStorage.getItem("erp_user");
+                    const userObj = savedUser ? JSON.parse(savedUser) : null;
+                    const res = await fetch("/api/backup", {
+                      headers: {
+                        "x-user-role": userObj?.role || "",
+                        "x-user-username": userObj?.username || ""
+                      }
+                    });
+                    if (res.ok) {
+                      const blob = await res.blob();
+                      const url = window.URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = `erp_backup_${new Date().toISOString().split('T')[0]}.json`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      if(showToast) showToast("Backup uğurla yükləndi!", "success");
+                    } else {
+                      if(showToast) showToast("Backup yüklənərkən xəta baş verdi.", "error");
+                    }
+                  }}
+                  className="px-4 py-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-sm"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Backup Et</span>
+                </button>
+              </div>
+
+              <div className="bg-amber-50/50 p-4 rounded-xl border border-amber-100 flex flex-col justify-between items-start space-y-3">
+                <div>
+                  <span className="font-bold text-xs text-amber-900 block mb-1">Məlumatı Bərpa Et (Restore)</span>
+                  <p className="text-[10px] text-amber-700/80 leading-relaxed">Əvvəllər yüklədiyiniz JSON faylını seçərək sistemi əvvəlki vəziyyətinə qaytarın. Cari məlumatlar silinəcək.</p>
+                </div>
+                <label className="px-4 py-2 w-full bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-sm cursor-pointer">
+                  <RotateCcw className="w-4 h-4" />
+                  <span>JSON Seç və Bərpa Et</span>
+                  <input 
+                    type="file" 
+                    accept=".json"
+                    className="hidden" 
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = async (event) => {
+                        try {
+                          const data = JSON.parse(event.target?.result as string);
+                          const savedUser = localStorage.getItem("erp_user");
+                          const userObj = savedUser ? JSON.parse(savedUser) : null;
+                          const res = await fetch("/api/restore", {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                              "x-user-role": userObj?.role || "",
+                              "x-user-username": userObj?.username || ""
+                            },
+                            body: JSON.stringify(data)
+                          });
+                          if (res.ok) {
+                            if(showToast) showToast("Məlumatlar uğurla bərpa edildi! Səhifə yenilənir...", "success");
+                            setTimeout(() => window.location.reload(), 1500);
+                          } else {
+                            if(showToast) showToast("Bərpa zamanı xəta baş verdi.", "error");
+                          }
+                        } catch (err) {
+                          if(showToast) showToast("Fayl oxunarkən və ya JSON formatında xəta baş verdi.", "error");
+                        }
+                      };
+                      reader.readAsText(file);
+                    }} 
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
+
           {/* AI Configuration Help */}
           <div className="space-y-3 border-t border-slate-100 pt-5">
             <h3 className="text-sm font-semibold text-slate-800 flex items-center space-x-2">
