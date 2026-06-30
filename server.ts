@@ -2,7 +2,6 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 import * as XLSX from "xlsx";
 
@@ -170,26 +169,6 @@ const adminOrUser = (req: express.Request, res: express.Response, next: express.
   }
   next();
 };
-
-// Lazy Gemini API client initialization
-let aiClient: GoogleGenAI | null = null;
-function getGeminiClient(): GoogleGenAI {
-  if (!aiClient) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error("GEMINI_API_KEY tapılmadı. Zəhmət olmasa Secrets bölməsində təyin edin.");
-    }
-    aiClient = new GoogleGenAI({
-      apiKey: apiKey,
-      httpOptions: {
-        headers: {
-          "User-Agent": "aistudio-build",
-        },
-      },
-    });
-  }
-  return aiClient;
-}
 
 // Clean and normalize name
 function normalizeCustomerName(name: string): string {
@@ -619,36 +598,6 @@ app.get("/api/reset", adminOnly, (req, res) => {
   res.json({ success: true, message: "Məlumatlar sıfırlandı." });
 });
 
-// Helper to call Gemini with robust exponential backoff retry and model fallback
-async function generateContentWithRetry(ai: GoogleGenAI, params: any, maxRetries = 3): Promise<any> {
-  let delay = 1000;
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      // On the last retry attempt, fallback to a lighter/alternative model just in case gemini-3.5-flash is entirely down
-      const model = attempt === maxRetries ? "gemini-3.1-flash-lite" : "gemini-3.5-flash";
-      const callParams = { ...params, model };
-      console.log(`Gemini status update: processing attempt ${attempt} with model ${model}`);
-      return await ai.models.generateContent(callParams);
-    } catch (err: any) {
-      const isTemporary = 
-        err.message?.includes("503") || 
-        err.message?.includes("429") || 
-        err.message?.includes("UNAVAILABLE") ||
-        err.message?.includes("high demand") ||
-        err.status === "UNAVAILABLE" ||
-        err.status === 503;
-      
-      if (attempt < maxRetries && isTemporary) {
-        console.log(`Gemini status: temporary network delay, retry scheduled in ${delay}ms...`);
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        delay *= 2;
-      } else {
-        throw err;
-      }
-    }
-  }
-}
-
 // Helper to parse invoice files (Excel/CSV/PDF) deterministically without AI
 async function parseInvoiceDeterministically(base64Data: string, fileName: string, mimeType: string) {
   try {
@@ -1032,8 +981,9 @@ app.post("/api/invoices/upload", adminOrUser, async (req, res) => {
   }
 
   try {
-    // 1. First try to parse deterministically (NO AI, 100% accurate rule-based extraction for Excel/CSV/PDF)
-    const deterministicData = await parseInvoiceDeterministically(base64Data, fileName || "invoice.xlsx", mimeType);
+    // 1. Only parse deterministically (NO AI, 100% accurate rule-based extraction for Excel/CSV/PDF)
+    let deterministicData = await parseInvoiceDeterministically(base64Data, fileName || "invoice.pdf", mimeType);
+    
     if (deterministicData) {
       console.log(`Successfully parsed invoice deterministically (AI-free) for file: ${fileName}`);
       deterministicData.customerName = normalizeCustomerName(deterministicData.customerName);
@@ -1042,156 +992,22 @@ app.post("/api/invoices/upload", adminOrUser, async (req, res) => {
         extractedData: deterministicData,
         isDemoFallback: false,
         isDeterministic: true,
-        message: "Excel / CSV faylı alqoritmik olaraq tam dəqiqliklə oxundu! (Süni İntellektsiz)"
+        message: "Sənəd daxili alqoritm ilə oxundu!"
       });
     }
 
-    // Check if API Key exists
-    if (!process.env.GEMINI_API_KEY) {
-      console.log("Notice: GEMINI_API_KEY is not defined. Using adaptive local document parsing system.");
-      
-      const fallbackExtracted = simulateExtraction(fileName || "invoice.pdf");
-      return res.json({
-        success: true,
-        extractedData: fallbackExtracted,
-        isDemoFallback: true,
-        message: "Gemini API açarı təyin olunmadığı üçün ağıllı demo simulyasiyası işə salındı."
-      });
-    }
-
-    const ai = getGeminiClient();
-
-    // Clean MIME type if needed
-    let cleanMimeType = mimeType;
-    if (mimeType.includes(";base64")) {
-      cleanMimeType = mimeType.split(";")[0];
-    }
-
-    // Standardize mapping for documents
-    // Excel mime-type is application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
-    // PDF mime-type is application/pdf
-    // Image mime-type is image/png or image/jpeg
-
-    const filePart = {
-      inlineData: {
-        mimeType: cleanMimeType,
-        data: base64Data
-      }
-    };
-
-    const promptText = 
-      "Sən peşəkar ERP qaimə oxuyucu sistemisən. Təqdim edilmiş sənədi (şəkil, PDF, yaxud Excel fəaliyyət vərəqi ola bilər) diqqətlə analiz et və aşağıdakı xanalara əsasən Azərbaycan dilində strukturlaşdırılmış məlumatları çıxar:\n" +
-      "1. customerName: Qəti şəkildə YALNIZ sənəddə mövcud olan mətnə əsasən müştəri (və ya alıcı, şirkət) adını tap və yaz. Heç bir halda təxmin etmə və ya özündən əlavələr etmə. Mətnin içərisində 'Müştəri:', 'Alıcı:', 'Şirkət:' kimi açar sözləri axtar və qarşısındakı dəqiq adı çıxart. Özündən fərziyyələr uydurma. Müştəri adını təmizlə, artıq dırnaqları yığışdır.\n" +
-      "2. invoiceNumber: Qaimənin nömrəsi və ya kodu. Tapılmasa 'QM-' ilə başlayan təsadüfi kod yarat.\n" +
-      "3. invoiceDate: Qaimənin yazıldığı tarix YYYY-MM-DD formatında.\n" +
-      "4. totalAmount: Qaimənin yekun ödəniş məbləği (rəqəm olaraq).\n" +
-      "5. items: Satılan məhsul və ya göstərilən xidmətlərin cədvəli. Hər məhsul üçün adı (name), miqdarı (quantity), vahid qiyməti (price) və cəmi məbləği (total) çıxar.";
-
-    console.log(`Analyzing file ${fileName} of type ${cleanMimeType} with Gemini...`);
-
-    const response = await generateContentWithRetry(ai, {
-      contents: [filePart, { text: promptText }],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            customerName: {
-              type: Type.STRING,
-              description: "Qəbul edən müştərinin adı"
-            },
-            invoiceNumber: {
-              type: Type.STRING,
-              description: "Qaimənin nömrəsi"
-            },
-            invoiceDate: {
-              type: Type.STRING,
-              description: "Qaimənin tarixi (YYYY-MM-DD)"
-            },
-            totalAmount: {
-              type: Type.NUMBER,
-              description: "Yekun ödəniləcək məbləğ"
-            },
-            items: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  name: { type: Type.STRING, description: "Məhsul və ya xidmət adı" },
-                  quantity: { type: Type.NUMBER, description: "Miqdar" },
-                  price: { type: Type.NUMBER, description: "Qiymət" },
-                  total: { type: Type.NUMBER, description: "Cəmi" }
-                },
-                required: ["name", "total"]
-              }
-            }
-          },
-          required: ["customerName", "totalAmount"]
-        }
-      }
-    });
-
-    const resultText = response.text;
-    if (!resultText) {
-      throw new Error("Gemini cavabından heç bir mətn oxuna bilmədi.");
-    }
-
-    const extractedData = JSON.parse(resultText.trim());
-    
-    // Normalize customer name for ERP grouping
-    extractedData.customerName = normalizeCustomerName(extractedData.customerName);
-
-    // Save automatically to DB if requested or send back to UI for approval
-    res.json({
-      success: true,
-      extractedData,
-      isDemoFallback: false
-    });
+    return res.status(400).json({ error: "Sənədi oxumaq mümkün olmadı. Lütfən əllə daxil edin." });
 
   } catch (err: any) {
-    console.log("Notice: Activating adaptive local document parsing system.");
-    
-    // Provide a smart mock simulation in case of generic failure
-    const fallbackExtracted = simulateExtraction(fileName || "invoice.pdf");
-    res.json({
-      success: true,
-      extractedData: fallbackExtracted,
-      isDemoFallback: true,
+    console.error("Extraction error:", err);
+    res.status(500).json({
+      success: false,
       error: err.message,
-      message: "Gemini server xətası baş verdi, lakin ERP sisteminizin dayanmaması üçün ağıllı demo məlumatlar generasiya edildi."
+      message: "Server xətası baş verdi."
     });
   }
 });
 
-// Helper to simulate invoice extraction based on file names or dummy patterns
-function simulateExtraction(fileName: string) {
-  const isExcel = fileName.toLowerCase().endsWith(".xlsx") || fileName.toLowerCase().endsWith(".xls");
-  const isImage = fileName.toLowerCase().match(/\.(png|jpg|jpeg|webp)$/i);
-  
-  // Custom smart responses based on simulated file name
-  let baseName = fileName.split('.')[0].replace(/[-_]/g, ' ');
-  // Capitalize first letters
-  baseName = baseName.replace(/\b\w/g, (l) => l.toUpperCase());
-  
-  let customerName = baseName.length > 2 && !['invoice', 'qaima', 'faktura', 'document'].includes(baseName.toLowerCase()) 
-                     ? baseName 
-                     : "Naməlum Müştəri";
-                     
-  let invoiceNumber = "QM-" + Math.floor(100000 + Math.random() * 900000);
-  let totalAmount = 4500;
-  let items: InvoiceItem[] = [
-    { name: "Texniki Avadanlıq Dəsti", quantity: 2, price: 1500, total: 3000 },
-    { name: "Quraşdırma və Tənzimləmə xidməti", quantity: 1, price: 1500, total: 1500 }
-  ];
-  
-  return {
-    customerName,
-    invoiceNumber,
-    invoiceDate: new Date().toISOString().split("T")[0],
-    totalAmount,
-    items
-  };
-}
 
 // Vite integration
 async function startServer() {
