@@ -68,7 +68,7 @@ export default function AdminPanelView({ currentUser, onResetDB, showToast }: Ad
     }
   };
 
-  const handleRoleChange = async (username: string, newRole: "admin" | "user") => {
+  const handleRoleChange = async (username: string, newRole: "admin" | "moderator" | "user") => {
     if (username.toLowerCase() === "admin") {
       showToast("Əsas 'admin' istifadəçisinin rolu dəyişdirilə bilməz!", "error");
       return;
@@ -87,7 +87,7 @@ export default function AdminPanelView({ currentUser, onResetDB, showToast }: Ad
         body: JSON.stringify({ role: newRole })
       });
       if (res.ok) {
-        showToast(`"${username}" istifadəçisinin rolu "${newRole === "admin" ? "Admin" : "User"}" olaraq yeniləndi.`, "success");
+        showToast(`"${username}" istifadəçisinin rolu "${newRole === "admin" ? "Admin" : newRole === "moderator" ? "Moderator" : "User"}" olaraq yeniləndi.`, "success");
         await fetchUsers();
         await fetchLogs();
       } else {
@@ -269,7 +269,9 @@ export default function AdminPanelView({ currentUser, onResetDB, showToast }: Ad
                         <div className="overflow-hidden">
                           <p className="text-xs font-bold text-slate-800 truncate">{u.username}</p>
                           <span className={`inline-block text-[9px] font-black uppercase tracking-wider px-1 py-0.5 rounded ${
-                            u.role === "admin" ? "bg-indigo-50 text-indigo-600" : "bg-slate-100 text-slate-500"
+                            u.role === "admin" ? "bg-indigo-50 text-indigo-600" : 
+                            u.role === "moderator" ? "bg-emerald-50 text-emerald-600" : 
+                            "bg-slate-100 text-slate-500"
                           }`}>
                             {u.role}
                           </span>
@@ -291,10 +293,21 @@ export default function AdminPanelView({ currentUser, onResetDB, showToast }: Ad
                       </button>
                       <button
                         disabled={isMainAdmin || updatingUser === u.username}
+                        onClick={() => handleRoleChange(u.username, "moderator")}
+                        className={`flex-1 text-[9px] font-black uppercase py-1 rounded transition border text-center cursor-pointer ${
+                          u.role === "moderator"
+                            ? "bg-emerald-600 border-emerald-600 text-white font-black shadow-xs"
+                            : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      >
+                        Mod
+                      </button>
+                      <button
+                        disabled={isMainAdmin || updatingUser === u.username}
                         onClick={() => handleRoleChange(u.username, "user")}
                         className={`flex-1 text-[9px] font-black uppercase py-1 rounded transition border text-center cursor-pointer ${
                           u.role === "user"
-                            ? "bg-indigo-600 border-indigo-600 text-white font-black shadow-xs"
+                            ? "bg-slate-800 border-slate-800 text-white font-black shadow-xs"
                             : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
                         } disabled:opacity-50 disabled:cursor-not-allowed`}
                       >
@@ -332,8 +345,9 @@ export default function AdminPanelView({ currentUser, onResetDB, showToast }: Ad
                   className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-hidden focus:border-indigo-500 font-medium"
                 >
                   <option value="all">Hamısı</option>
-                  <option value="admin">Admin</option>
-                  <option value="user">User (Oxucu)</option>
+                  {users.map(u => (
+                    <option key={u.username} value={u.username}>{u.username} ({u.role})</option>
+                  ))}
                 </select>
               </div>
             </div>

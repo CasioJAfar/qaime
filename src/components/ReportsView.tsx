@@ -216,7 +216,7 @@ export default function ReportsView({ customers, invoices, loading, onInvoiceUpd
   };
 
   return (
-    <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8 bg-[#F8FAFC] space-y-6 print:bg-white print:p-0 w-full max-w-full">
+    <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8 bg-[#F8FAFC] space-y-6 print:bg-white print:p-0 print:overflow-visible print:block print:h-auto w-full max-w-full">
       {/* Header (Hide when printing) */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0 print:hidden shrink-0">
         <div>
@@ -340,7 +340,7 @@ export default function ReportsView({ customers, invoices, loading, onInvoiceUpd
       <div className="bg-white p-6 md:p-8 rounded-xl border border-slate-200 shadow-sm print:border-none print:shadow-none print:p-0 space-y-6 font-sans">
         
         {/* Printable Header Details */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-between sm:items-start border-b border-slate-150 pb-6">
+        <div className="flex flex-col sm:flex-row print:flex-row gap-4 justify-between sm:items-start print:items-start border-b border-slate-150 pb-6">
           <div>
             <h1 className="text-xl font-semibold text-slate-900 tracking-tight">QAİMƏ</h1>
             <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wider font-bold">Ağıllı Maliyyə və Qaimə Uçotu</p>
@@ -349,9 +349,9 @@ export default function ReportsView({ customers, invoices, loading, onInvoiceUpd
               Dövlət Vergi Xidməti Reystrinə uyğundur
             </p>
           </div>
-          <div className="text-left sm:text-right flex flex-col items-start sm:items-end">
+          <div className="text-left sm:text-right print:text-right flex flex-col items-start sm:items-end print:items-end">
             <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">HESABAT TARİXİ</div>
-            <div className="text-xs font-semibold text-slate-700 mt-1 flex items-center justify-start sm:justify-end">
+            <div className="text-xs font-semibold text-slate-700 mt-1 flex items-center justify-start sm:justify-end print:justify-end">
               <Calendar className="w-3.5 h-3.5 text-slate-400 mr-1.5 shrink-0" />
               {new Date().toISOString().split("T")[0]}
             </div>
@@ -362,16 +362,16 @@ export default function ReportsView({ customers, invoices, loading, onInvoiceUpd
         </div>
 
         {/* Aggregate Financial Metrics */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 bg-slate-50 p-4 rounded-xl border border-slate-150 print:bg-slate-50">
+        <div className="grid grid-cols-1 sm:grid-cols-3 print:grid-cols-3 gap-4 sm:gap-6 print:gap-6 bg-slate-50 p-4 rounded-xl border border-slate-150 print:bg-slate-50">
           <div>
             <span className="text-[9px] text-slate-400 font-bold uppercase block tracking-wider">Ümumi Satış Həcmi</span>
             <span className="text-lg font-mono font-bold text-indigo-600 mt-0.5 block">{formatAZN(totalSales)}</span>
           </div>
-          <div className="border-t sm:border-t-0 sm:border-l border-slate-200 pt-3 sm:pt-0 sm:pl-6">
+          <div className="border-t sm:border-t-0 print:border-t-0 sm:border-l print:border-l border-slate-200 pt-3 sm:pt-0 print:pt-0 sm:pl-6 print:pl-6">
             <span className="text-[9px] text-emerald-700 font-bold uppercase block tracking-wider">Cəmi Yığılmış (Mədaxil)</span>
             <span className="text-lg font-mono font-bold text-emerald-600 mt-0.5 block">{formatAZN(totalCollected)}</span>
           </div>
-          <div className="border-t sm:border-t-0 sm:border-l border-slate-200 pt-3 sm:pt-0 sm:pl-6">
+          <div className="border-t sm:border-t-0 print:border-t-0 sm:border-l print:border-l border-slate-200 pt-3 sm:pt-0 print:pt-0 sm:pl-6 print:pl-6">
             <span className="text-[9px] text-rose-700 font-bold uppercase block tracking-wider">Qalıq Debitor Borc</span>
             <span className="text-lg font-mono font-bold text-rose-600 mt-0.5 block">{formatAZN(totalOutstanding)}</span>
           </div>
@@ -389,7 +389,7 @@ export default function ReportsView({ customers, invoices, loading, onInvoiceUpd
           </div>
 
           {/* Desktop Table View */}
-          <div className="overflow-x-auto hidden md:block print:block">
+          <div className="overflow-x-auto hidden md:block print:block print:overflow-x-visible">
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="bg-slate-50 text-[10px] text-slate-500 uppercase tracking-[0.1em] border-b border-slate-200">
@@ -495,7 +495,7 @@ export default function ReportsView({ customers, invoices, loading, onInvoiceUpd
         </div>
 
         {/* Signatures Panel (Great for official PDF reports look!) */}
-        <div className="grid grid-cols-2 gap-8 pt-12 border-t border-slate-100 print:hidden">
+        <div className="grid grid-cols-2 gap-8 pt-12 border-t border-slate-100 mt-12">
           <div className="space-y-4">
             <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest block">Hazırladı (Mühasibatlıq)</span>
             <div className="border-b border-slate-200 h-8 w-44"></div>

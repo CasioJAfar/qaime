@@ -272,12 +272,12 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden font-sans text-slate-700 bg-slate-100">
+    <div className="flex h-screen w-screen overflow-hidden font-sans text-slate-700 bg-slate-100 print:h-auto print:w-auto print:overflow-visible print:block">
       {/* Sidebar Navigation */}
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} currentUser={currentUser} onLogout={handleLogout} />
 
       {/* Main Content Pane */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden pb-16 md:pb-0">
+      <main className="flex-1 flex flex-col h-full overflow-hidden pb-16 md:pb-0 print:overflow-visible print:block print:h-auto print:pb-0">
         
         {/* Connection status and technical feedback banner */}
         {error && (
@@ -297,7 +297,7 @@ export default function App() {
         )}
 
         {/* View Router */}
-        <div className="flex-1 flex overflow-hidden relative">
+        <div className="flex-1 flex overflow-hidden relative print:overflow-visible print:block print:h-auto">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
@@ -305,7 +305,7 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
-              className="flex-1 flex overflow-hidden w-full"
+              className="flex-1 flex overflow-hidden w-full print:overflow-visible print:block print:h-auto"
             >
               {activeTab === "dashboard" && (
                 <DashboardView 
@@ -365,7 +365,7 @@ export default function App() {
                 />
               )}
 
-              {activeTab === "profit" && (
+              {activeTab === "profit" && currentUser.role !== "user" && (
                 <ProfitView 
                   invoices={invoices} 
                   currency={currency}

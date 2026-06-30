@@ -26,7 +26,7 @@ export default function Sidebar({ activeTab, setActiveTab, currentUser, onLogout
     { id: "customers", label: "Müştərilər", icon: Users },
     { id: "debts", label: "Borclar", icon: CreditCard },
     { id: "reports", label: "Hesabatlar", icon: FileSpreadsheet },
-    { id: "profit", label: "Xərc və Mənfəət", icon: TrendingUp },
+    ...(currentUser?.role !== "user" ? [{ id: "profit", label: "Xərc və Mənfəət", icon: TrendingUp }] : []),
     ...(currentUser?.role === "admin" ? [{ id: "admin_panel", label: "Admin Panel", icon: Shield }] : []),
     { id: "settings", label: "Ayarlar", icon: Settings },
   ];
@@ -34,7 +34,7 @@ export default function Sidebar({ activeTab, setActiveTab, currentUser, onLogout
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex w-60 bg-[#1E293B] flex-col h-full shrink-0 border-r border-[#334155]">
+      <aside className="hidden md:flex w-60 bg-[#1E293B] flex-col h-full shrink-0 border-r border-[#334155] print:hidden">
         {/* Brand Header */}
         <div className="p-6 flex items-center gap-3">
           <div className="w-8 h-8 bg-indigo-500 rounded flex items-center justify-center font-bold text-white shadow-lg font-display">
@@ -73,7 +73,11 @@ export default function Sidebar({ activeTab, setActiveTab, currentUser, onLogout
             </div>
             <div className="flex-1 overflow-hidden">
               <p className="text-xs font-bold text-white truncate uppercase tracking-wide">{currentUser?.username}</p>
-              <p className="text-[10px] text-slate-400 truncate capitalize font-medium">{currentUser?.role === "admin" ? "Yüksək Səlahiyyət" : "Oxucu"}</p>
+              <p className="text-[10px] text-slate-400 truncate capitalize font-medium">{
+                currentUser?.role === "admin" ? "Yüksək Səlahiyyət" : 
+                currentUser?.role === "moderator" ? "Moderator" : 
+                "Oxucu"
+              }</p>
             </div>
           </div>
 
@@ -88,7 +92,7 @@ export default function Sidebar({ activeTab, setActiveTab, currentUser, onLogout
       </aside>
 
       {/* Mobile Bottom Navigation Bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-[#1E293B] border-t border-[#334155] flex items-center justify-around px-1 z-40 shadow-xl overflow-x-auto whitespace-nowrap scrollbar-none">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-[#1E293B] border-t border-[#334155] flex items-center justify-around px-1 z-40 shadow-xl overflow-x-auto whitespace-nowrap scrollbar-none print:hidden">
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;

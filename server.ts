@@ -74,7 +74,7 @@ interface LogEntry {
 interface User {
   username: string;
   password?: string;
-  role: "admin" | "user";
+  role: "admin" | "moderator" | "user";
 }
 
 interface DBState {
@@ -164,10 +164,10 @@ const adminOnly = (req: express.Request, res: express.Response, next: express.Ne
   next();
 };
 
-// Role check middleware allowing both Admin and User roles
+// Role check middleware allowing both Admin, Moderator, and User roles
 const adminOrUser = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const role = req.headers["x-user-role"] || req.query.role;
-  if (role !== "admin" && role !== "user") {
+  if (role !== "admin" && role !== "user" && role !== "moderator") {
     return res.status(403).json({ error: "Bu əməliyyat üçün giriş tələb olunur." });
   }
   next();
@@ -213,7 +213,7 @@ app.get("/api/users", adminOnly, (req, res) => {
 app.post("/api/users/:username/role", adminOnly, (req, res) => {
   const { username } = req.params;
   const { role } = req.body;
-  if (role !== "admin" && role !== "user") {
+  if (role !== "admin" && role !== "user" && role !== "moderator") {
     return res.status(400).json({ error: "Yanlış rol təyin edildi." });
   }
   const db = readDB();
