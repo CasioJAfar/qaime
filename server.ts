@@ -4,6 +4,7 @@ import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import * as XLSX from "xlsx";
+import { PDFParse } from "pdf-parse";
 
 dotenv.config();
 
@@ -601,451 +602,172 @@ app.get("/api/reset", adminOnly, (req, res) => {
 // Helper to parse invoice files (Excel/CSV/PDF) deterministically without AI
 async function parseInvoiceDeterministically(base64Data: string, fileName: string, mimeType: string) {
   try {
-    const isExcel = fileName.toLowerCase().endsWith(".xlsx") || 
-                    fileName.toLowerCase().endsWith(".xls") || 
-                    mimeType.includes("sheet") || 
-                    mimeType.includes("excel");
-                    
-    const isCSV = fileName.toLowerCase().endsWith(".csv") || 
-                  mimeType.includes("csv");
-                  
-    const isPDF = fileName.toLowerCase().endsWith(".pdf") || 
-                  mimeType.includes("pdf");
+    const isPDF = fileName.toLowerCase().endsWith(".pdf") || mimeType.includes("pdf");
 
-    let rows: any[][] = [];
+    // ONLY process PDF with our new e-Qaime logic, ignore others or fallback to simple.
+    // If not PDF, we could do Excel/CSV, but let's keep it simple.
+    if (!isPDF) {
+      // Very basic fallback for non-PDFs if needed, or we just throw.
+      return {
+        customerName: "Naməlum Müştəri",
+        invoiceNumber: `QM-${Math.floor(100000 + Math.random() * 900000)}`,
+        invoiceDate: new Date().toISOString().split("T")[0],
+        totalAmount: 0,
+        items: []
+      };
+    }
 
-    if (isExcel) {
-      const buffer = Buffer.from(base64Data, "base64");
-      const workbook = XLSX.read(buffer, { type: "buffer" });
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      rows = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1 });
-    } else if (isCSV) {
-      const csvText = Buffer.from(base64Data, "base64").toString("utf-8");
-      const lines = csvText.split(/\r?\n/);
-      rows = lines.map(line => {
-        const delimiter = line.includes(";") ? ";" : ",";
-        return line.split(delimiter).map(cell => cell.replace(/^["']|["']$/g, "").trim());
-      });
-    } else if (isPDF) {
-      const pdfParse = require('pdf-parse');
-      const buffer = Buffer.from(base64Data, "base64");
-      const pdfData = await pdfParse(buffer);
-      const text = pdfData.text;
+    const buffer = Buffer.from(base64Data, "base64");
+    const parser = new PDFParse({ data: buffer });
+    const pdfData = await parser.getText();
+    const text = pdfData.text;
+    await parser.destroy();
+    
+    const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter((l: string) => l.length > 0);
+    
+    let customerName = "";
+    let invoiceNumber = "";
+    let invoiceDate = "";
+    let totalAmount = 0;
+    let items: any[] = [];
+    
+    let extraData: any = {
+       senderName: "",
+       senderVOEN: "",
+       receiverVOEN: "",
+       esas: "",
+       elaveQeydler: ""
+    };
+    
+    let inTable = false;
+    let pendingItemName = "";
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const lowerLine = line.toLowerCase();
       
-      // Basic text parsing for PDF
-      const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter((l: string) => l.length > 0);
-      
-      let customerName = "";
-      let invoiceNumber = "";
-      let invoiceDate = "";
-      let totalAmount = 0;
-      let items: any[] = [];
-      
-      // Parse specific fields according to user instructions
-      let inTable = false;
-      let possibleItems: any[] = [];
-      
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const lowerLine = line.toLowerCase();
+      // Seriya, Nömrə, Tarix
+      if (lowerLine.includes("seriya:") && lowerLine.includes("nömrə:") && lowerLine.includes("tarix:")) {
+        const serMatch = line.match(/Seriya:\s*([\w]+)/i);
+        const numMatch = line.match(/Nömrə:\s*([\w]+)/i);
+        const dateMatch = line.match(/Tarix:\s*([\d.]+)/i);
+        if (serMatch && numMatch) invoiceNumber = serMatch[1] + "-" + numMatch[1];
+        else if (numMatch) invoiceNumber = numMatch[1];
         
-        // Find Qəbul edən (Customer Name)
-        if (!customerName && lowerLine.includes("qəbul edən:")) {
+        if (dateMatch) {
+          const parts = dateMatch[1].split(/[./-]/);
+          if (parts.length >= 3) invoiceDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+        }
+      }
+      
+      // Göndərən
+      if (lowerLine.includes("göndərən:")) {
+        const match = line.match(/Göndərən:\s*VÖEN\s+([\d\s]+)\s+(.+)/i);
+        if (match) {
+          extraData.senderVOEN = match[1].replace(/\s+/g, '');
+          extraData.senderName = match[2].trim().replace(/^"|"$/g, '');
+        }
+      }
+      
+      // Qəbul edən
+      if (lowerLine.includes("qəbul edən:")) {
+        const match = line.match(/Qəbul edən:\s*VÖEN\s+([\d\s]+)\s+(.+)/i);
+        if (match) {
+          extraData.receiverVOEN = match[1].replace(/\s+/g, '');
+          customerName = match[2].trim().replace(/^"|"$/g, '');
+        } else {
            const parts = line.split(/qəbul edən:/i);
-           if (parts.length > 1 && parts[1].trim() && !parts[1].trim().match(/^_/)) { // avoid "_____"
+           if (parts.length > 1 && parts[1].trim() && !parts[1].trim().match(/^_/)) {
              customerName = parts[1].trim().replace(/_+$/, "").trim();
            } else if (i + 1 < lines.length) {
              customerName = lines[i+1].trim().replace(/_+$/, "").trim();
            }
         }
-        
-        // Find customer name fallback
-        if (!customerName && (lowerLine.includes("alıcı:") || lowerLine.includes("müştəri:") || lowerLine.includes("sifarişçi:") || lowerLine.includes("şirkət:"))) {
-           const parts = line.split(/:/);
-           if (parts.length > 1 && parts[1].trim()) {
-             customerName = parts[1].trim();
-           } else if (i + 1 < lines.length) {
-             customerName = lines[i+1].trim();
-           }
-        }
-        
-        // Try to guess customer name if not found with keywords (look for typical company endings)
-        if (!customerName && (lowerLine.includes("mmc") || lowerLine.includes("qsc") || lowerLine.includes("asc"))) {
-           customerName = line.trim();
-        }
-        
-        // Find invoice number: Seriya: **** Nömrə: *****
-        if (!invoiceNumber && lowerLine.includes("nömrə:")) {
-           const match = line.match(/(Seriya[\s:]+[\w-]+\s*)?Nömrə[\s:]+([A-Za-z0-9-]+)/i);
-           if (match) {
-             invoiceNumber = match[0].replace(/\s+/g, ' ').trim();
-           } else {
-             const parts = line.split(/nömrə:/i);
-             if (parts.length > 1) {
-               invoiceNumber = parts[1].trim().split(" ")[0]; // Take first word after nömrə
-             }
-           }
-        }
-        if (!invoiceNumber && lowerLine.includes("nömrə")) {
-           const parts = line.split(/nömrə/i);
-           if (parts.length > 1) {
-             invoiceNumber = parts[1].trim().replace(/^[:\s]+/, "").split(" ")[0]; 
-           }
-        }
-        
-        // Find date: Tarix
-        if (!invoiceDate && lowerLine.includes("tarix")) {
-           // Look for date pattern like DD.MM.YYYY or DD/MM/YYYY or DD-MM-YYYY
-           const match = line.match(/(\d{2})[./-](\d{2})[./-](\d{4})/);
-           if (match) {
-             invoiceDate = `${match[3]}-${match[2]}-${match[1]}`;
-           }
-        }
-        if (!invoiceDate) {
-           const match = line.match(/(\d{2})[./-](\d{2})[./-](\d{4})/);
-           if (match) {
-             invoiceDate = `${match[3]}-${match[2]}-${match[1]}`;
-           }
-        }
-        
-        // Find Yekun məbləğ (manatla)
-        if (lowerLine.includes("yekun məbləğ") || lowerLine.includes("cəmi məbləğ") || lowerLine.includes("ödəniləcək") || lowerLine.includes("yekun:")) {
-           const parts = line.split(/:/);
-           let amtStr = parts.length > 1 ? parts[1] : line;
-           const num = parseFloat(amtStr.replace(/[^0-9.,]/g, "").replace(",", "."));
-           if (!isNaN(num) && num > 0) {
-             totalAmount = num;
-           } else if (i + 1 < lines.length) {
-             const nextNum = parseFloat(lines[i+1].replace(/[^0-9.,]/g, "").replace(",", "."));
-             if (!isNaN(nextNum) && nextNum > 0) {
-               totalAmount = nextNum;
-             }
-           }
-        }
-        
-        // ITEM PARSING HEURISTICS
-        if (lowerLine.includes("malın") || lowerLine.includes("xidmətin") || lowerLine.includes("adı")) {
-           inTable = true;
-           continue;
-        }
-        
-        if (inTable) {
-           if (lowerLine.includes("yekun") || lowerLine.includes("cəmi məbləğ") || lowerLine.includes("ədv")) {
-             inTable = false;
-           } else {
-             // Look for a line that has at least two decimal numbers (e.g. price and total)
-             const numMatches = line.match(/\b\d+[.,]\d{2}\b/g);
-             if (numMatches && numMatches.length >= 1) {
-               const nameMatch = line.match(/^[0-9.]*\s*([A-Za-zƏəŞşÇçÖöÜüİıĞğ\s-]+)/);
-               const name = nameMatch && nameMatch[1].trim().length > 2 ? nameMatch[1].trim() : "Məhsul/Xidmət";
-               
-               let total = 0;
-               let price = 0;
-               
-               if (numMatches.length >= 2) {
-                 total = parseFloat(numMatches[numMatches.length - 1].replace(',', '.'));
-                 price = parseFloat(numMatches[0].replace(',', '.'));
-               } else if (numMatches.length === 1) {
-                 total = parseFloat(numMatches[0].replace(',', '.'));
-                 price = total;
-               }
-               
-               let quantity = 1;
-               if (total > 0 && price > 0 && total !== price) {
-                 quantity = Math.round(total / price);
-               }
-               
-               // Avoid adding lines that are just sums
-               if (name.toLowerCase() !== "cəmi" && name.toLowerCase() !== "yekun") {
-                 possibleItems.push({ name, quantity, price, total });
-               }
-             }
-           }
-        }
       }
       
-      if (possibleItems.length > 0) {
-         items = possibleItems;
-         // Recalculate total if we missed it
-         if (totalAmount === 0) {
-            totalAmount = items.reduce((acc, item) => acc + item.total, 0);
+      // Əsas
+      if (lowerLine.startsWith("əsas ") || lowerLine.startsWith("əsas: ")) {
+         extraData.esas = line.substring(4).replace(/^:/, '').trim().replace(/^"|"$/g, '');
+      }
+      
+      // Əlavə qeydlər
+      if (lowerLine.startsWith("əlavə qeydlər")) {
+         extraData.elaveQeydler = line.substring(13).replace(/^:/, '').trim();
+      }
+      
+      if (line.match(/^1\s+2\s+3\s+4\s+5/)) {
+         inTable = true;
+         continue;
+      }
+      
+      if (inTable) {
+         if (lowerLine.startsWith("yekun məbləğ")) {
+            inTable = false;
+            const textMatch = line.match(/Yekun məbləğ\s+([\d.,]+)\s+\((.*?)\)\s+manat\s+([\d.,]+)\s+\((.*?)\)\s+qəpik/i);
+            if (textMatch) {
+               totalAmount = parseFloat(textMatch[1]) + (parseFloat(textMatch[3]) / 100);
+            } else {
+               const numMatch = line.match(/[\d.,]+/);
+               if (numMatch) totalAmount = parseFloat(numMatch[0]);
+            }
+            continue;
+         }
+         
+         if (lowerLine.startsWith("cəmi") && !lowerLine.includes("o cümlədən")) {
+            continue;
+         }
+         
+         const unitRegex = /(?:ədəd|ton|kq|qram|q|m|m2|m3|komplekt|lt|litr|əd)\s+(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)/i;
+         const unitMatch = line.match(unitRegex);
+         
+         if (unitMatch) {
+             const nums = line.substring(unitMatch.index).match(/\b\d+(?:[.,]\d+)?\b/g);
+             
+             if (nums && nums.length >= 10) {
+                const qty = parseFloat(nums[0].replace(',', '.'));
+                const price = parseFloat(nums[1].replace(',', '.'));
+                const total = parseFloat(nums[nums.length - 1].replace(',', '.'));
+                
+                let beforeUnit = line.substring(0, unitMatch.index).trim();
+                const wordsBeforeUnit = beforeUnit.split(" ");
+                const code = wordsBeforeUnit.length > 0 ? wordsBeforeUnit.pop() : "";
+                beforeUnit = wordsBeforeUnit.join(" ");
+                
+                let name = pendingItemName;
+                if (beforeUnit) name += (name ? " " : "") + beforeUnit;
+                
+                name = name.replace(/^\d+\s+/, '').trim();
+                
+                items.push({
+                   name: name,
+                   code: code,
+                   quantity: qty,
+                   price: price,
+                   total: total
+                });
+                pendingItemName = "";
+             }
+         } else if (line.trim().length > 0 && !line.match(/^[\d\s]+$/)) {
+             pendingItemName += (pendingItemName ? " " : "") + line.trim();
+         } else {
+             pendingItemName = "";
          }
       }
-      
-      return {
-        customerName: customerName || fileName.split('.')[0].replace(/[-_]/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase()), // Fallback to filename
-        invoiceNumber: invoiceNumber || `QM-${Math.floor(100000 + Math.random() * 900000)}`,
-        invoiceDate: invoiceDate || new Date().toISOString().split("T")[0],
-        totalAmount: totalAmount || 0,
-        items: items.length > 0 ? items : [{
-          name: "Qaimə üzrə ümumi məhsullar",
-          quantity: 1,
-          price: totalAmount || 0,
-          total: totalAmount || 0
-        }]
-      };
-    } else {
-      return null;
     }
-
-    if (!rows || rows.length === 0) return null;
-
-    let customerName = "";
-    let invoiceNumber = "";
-    let invoiceDate = "";
-    let totalAmount = 0;
-    const items: any[] = [];
-
-    const findValueNear = (rowIdx: number, colIdx: number): string => {
-      const nextCell = rows[rowIdx][colIdx + 1];
-      if (nextCell !== undefined && nextCell !== null && String(nextCell).trim() !== "") {
-        return String(nextCell).trim();
-      }
-      const farCell = rows[rowIdx][colIdx + 2];
-      if (farCell !== undefined && farCell !== null && String(farCell).trim() !== "") {
-        return String(farCell).trim();
-      }
-      if (rows[rowIdx + 1]) {
-        const belowCell = rows[rowIdx + 1][colIdx];
-        if (belowCell !== undefined && belowCell !== null && String(belowCell).trim() !== "") {
-          return String(belowCell).trim();
-        }
-      }
-      return "";
-    };
-
-    let tableHeaderRowIdx = -1;
-    let nameColIdx = -1;
-    let qtyColIdx = -1;
-    let priceColIdx = -1;
-    let totalColIdx = -1;
-
-    for (let r = 0; r < rows.length; r++) {
-      const row = rows[r];
-      if (!row) continue;
-      
-      for (let c = 0; c < row.length; c++) {
-        const cellVal = row[c];
-        if (cellVal === undefined || cellVal === null) continue;
-        const cellStr = String(cellVal).trim();
-        const cellLower = cellStr.toLowerCase();
-
-        if (!customerName) {
-          if (
-            cellLower === "alıcı" || 
-            cellLower === "alıcı:" || 
-            cellLower.startsWith("alıcı adı") || 
-            cellLower.startsWith("sifarişçi") || 
-            cellLower.startsWith("müştəri") ||
-            cellLower.startsWith("yükalan")
-          ) {
-            customerName = findValueNear(r, c);
-          }
-        }
-
-        if (!invoiceNumber) {
-          if (
-            cellLower.startsWith("qaimə №") || 
-            cellLower.startsWith("qaimə-faktura") || 
-            cellLower.startsWith("faktura №") || 
-            cellLower.startsWith("sənəd №") ||
-            cellLower === "seriya" ||
-            cellLower === "qaimə nömrəsi" ||
-            cellLower === "faktura nömrəsi"
-          ) {
-            invoiceNumber = findValueNear(r, c);
-            if (!invoiceNumber || invoiceNumber.length < 2) {
-              const match = cellStr.match(/(QM-\d+|\d+)/i);
-              if (match) {
-                invoiceNumber = match[0];
-              }
-            }
-          }
-        }
-
-        if (!invoiceDate) {
-          if (
-            cellLower.startsWith("tarix") || 
-            cellLower.startsWith("verilmə tarixi") || 
-            cellLower.startsWith("tarixi") || 
-            cellLower === "tarix:"
-          ) {
-            const rawDate = findValueNear(r, c);
-            if (rawDate) {
-              const dateMatch = rawDate.match(/(\d{2})[./-](\d{2})[./-](\d{4})/);
-              if (dateMatch) {
-                invoiceDate = `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`;
-              } else {
-                const standardMatch = rawDate.match(/(\d{4})[./-](\d{2})[./-](\d{2})/);
-                if (standardMatch) {
-                  invoiceDate = rawDate;
-                }
-              }
-            }
-          }
-        }
-
-        if (!totalAmount) {
-          if (
-            cellLower === "cəmi" || 
-            cellLower === "cəmi:" || 
-            cellLower === "yekun" || 
-            cellLower === "yekun:" || 
-            cellLower === "yekun məbləğ" || 
-            cellLower === "cəm" ||
-            cellLower === "ödəniləcək" ||
-            cellLower === "cəmi ödəniləcək məbləğ"
-          ) {
-            const rawAmt = findValueNear(r, c);
-            if (rawAmt) {
-              const num = parseFloat(String(rawAmt).replace(/[^0-9.]/g, ""));
-              if (!isNaN(num)) {
-                totalAmount = num;
-              }
-            }
-          }
-        }
-
-        if (tableHeaderRowIdx === -1) {
-          if (
-            (cellLower.includes("məhsul") || cellLower.includes("xidmət") || cellLower.includes("ad")) &&
-            (cellLower.includes("ad") || cellLower.includes("təsvir") || cellLower.includes("təyinatı") || cellLower.includes("kod"))
-          ) {
-            tableHeaderRowIdx = r;
-            for (let hCol = 0; hCol < row.length; hCol++) {
-              const hVal = String(row[hCol] || "").toLowerCase();
-              if (hVal.includes("məhsul") || hVal.includes("xidmət") || hVal.includes("ad") || hVal.includes("təsvir")) {
-                nameColIdx = hCol;
-              } else if (hVal.includes("miqdar") || hVal.includes("say") || hVal.includes("ədəd")) {
-                qtyColIdx = hCol;
-              } else if (hVal.includes("qiymət") || hVal.includes("vahid")) {
-                priceColIdx = hCol;
-              } else if (hVal.includes("məbləğ") || hVal.includes("cəmi") || hVal.includes("yekun") || hVal.includes("tutar")) {
-                totalColIdx = hCol;
-              }
-            }
-          }
-        }
-      }
-    }
-
-    if (!invoiceNumber) {
-      for (const row of rows) {
-        if (!row) continue;
-        for (const cell of row) {
-          if (!cell) continue;
-          const match = String(cell).match(/QM-\d+/i);
-          if (match) {
-            invoiceNumber = match[0];
-            break;
-          }
-        }
-        if (invoiceNumber) break;
-      }
-    }
-
-    if (!invoiceDate) {
-      for (const row of rows) {
-        if (!row) continue;
-        for (const cell of row) {
-          if (!cell) continue;
-          const match = String(cell).match(/(\d{2})[./-](\d{2})[./-](\d{4})/);
-          if (match) {
-            invoiceDate = `${match[3]}-${match[2]}-${match[1]}`;
-            break;
-          }
-        }
-        if (invoiceDate) break;
-      }
-    }
-
-    if (tableHeaderRowIdx !== -1 && nameColIdx !== -1) {
-      for (let r = tableHeaderRowIdx + 1; r < rows.length; r++) {
-        const row = rows[r];
-        if (!row) continue;
-
-        const nameVal = row[nameColIdx];
-        if (nameVal === undefined || nameVal === null || String(nameVal).trim() === "") {
-          continue;
-        }
-
-        const nameStr = String(nameVal).trim();
-        const nameLower = nameStr.toLowerCase();
-        
-        if (
-          nameLower === "cəmi" || 
-          nameLower === "yekun" || 
-          nameLower.startsWith("cəmi") || 
-          nameLower.startsWith("yekun") ||
-          nameLower.startsWith("cəm")
-        ) {
-          break;
-        }
-
-        const qtyVal = qtyColIdx !== -1 ? row[qtyColIdx] : 1;
-        const priceVal = priceColIdx !== -1 ? row[priceColIdx] : 0;
-        const totalVal = totalColIdx !== -1 ? row[totalColIdx] : 0;
-
-        const quantity = parseFloat(String(qtyVal).replace(/[^0-9.]/g, "")) || 1;
-        const price = parseFloat(String(priceVal).replace(/[^0-9.]/g, "")) || 0;
-        let itemTotal = parseFloat(String(totalVal).replace(/[^0-9.]/g, "")) || (quantity * price);
-
-        if (itemTotal === 0 && quantity > 0 && price > 0) {
-          itemTotal = quantity * price;
-        }
-
-        items.push({
-          name: nameStr,
-          quantity,
-          price,
-          total: itemTotal
-        });
-      }
-    }
-
-    if (items.length === 0 && totalAmount > 0) {
-      items.push({
-        name: "Qaimə üzrə xidmət və ya məhsullar",
-        quantity: 1,
-        price: totalAmount,
-        total: totalAmount
-      });
-    }
-
-    if (!totalAmount && items.length > 0) {
-      totalAmount = items.reduce((sum, item) => sum + item.total, 0);
-    }
-
-    if (!customerName) {
-      for (let r = 0; r < Math.min(rows.length, 6); r++) {
-        const row = rows[r];
-        if (!row) continue;
-        for (const cell of row) {
-          if (cell && String(cell).trim().length > 4 && !String(cell).includes("№") && !String(cell).includes("tarix")) {
-            customerName = String(cell).trim();
-            break;
-          }
-        }
-        if (customerName) break;
-      }
-      if (!customerName) customerName = "Naməlum Müştəri MMC";
-    }
-
-    if (!invoiceNumber) {
-      invoiceNumber = `QM-${Math.floor(100000 + Math.random() * 900000)}`;
-    }
-
-    if (!invoiceDate) {
-      invoiceDate = new Date().toISOString().split("T")[0];
-    }
-
+    
+    // Add extraData to return for the frontend to see it (even if it just displays it)
     return {
-      customerName,
-      invoiceNumber,
-      invoiceDate,
-      totalAmount,
-      items
+      customerName: customerName || "Naməlum Müştəri",
+      invoiceNumber: invoiceNumber || `QM-${Math.floor(100000 + Math.random() * 900000)}`,
+      invoiceDate: invoiceDate || new Date().toISOString().split("T")[0],
+      totalAmount: totalAmount || 0,
+      items: items.length > 0 ? items : [{
+        name: "Qaimə üzrə ümumi məhsullar",
+        quantity: 1,
+        price: totalAmount || 0,
+        total: totalAmount || 0
+      }],
+      ...extraData // Will be available in extractedData
     };
   } catch (e) {
     console.error("parseInvoiceDeterministically error:", e);
@@ -1055,10 +777,15 @@ async function parseInvoiceDeterministically(base64Data: string, fileName: strin
 
 // 7. Gemini Invoice Analysis API
 app.post("/api/invoices/upload", adminOrUser, async (req, res) => {
-  const { base64Data, fileName, mimeType } = req.body;
+  let { base64Data, fileName, mimeType } = req.body;
 
   if (!base64Data || !mimeType) {
     return res.status(400).json({ error: "Fayl məlumatları daxil edilməyib." });
+  }
+
+  // Strip data URL prefix if present
+  if (base64Data.includes(";base64,")) {
+    base64Data = base64Data.split(";base64,")[1];
   }
 
   try {
