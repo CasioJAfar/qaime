@@ -882,8 +882,11 @@ async function parseInvoiceDeterministically(base64Data: string, fileName: strin
         }
       }
       
+      let baseFileName = fileName.split('.')[0].replace(/[-_]/g, ' ');
+      baseFileName = baseFileName.replace(/\b\w/g, (l) => l.toUpperCase());
+      
       return {
-        customerName: customerName || fileName.split('.')[0].substring(0, 15),
+        customerName: customerName || (baseFileName.length > 2 ? baseFileName : "Xəzər Logistika"),
         invoiceNumber: invoiceNumber || `QM-${Math.floor(100000 + Math.random() * 900000)}`,
         invoiceDate: invoiceDate || new Date().toISOString().split("T")[0],
         totalAmount: totalAmount || 0,
@@ -1308,39 +1311,21 @@ function simulateExtraction(fileName: string) {
   const isImage = fileName.toLowerCase().match(/\.(png|jpg|jpeg|webp)$/i);
   
   // Custom smart responses based on simulated file name
-  let customerName = "Xəzər Logistika";
+  let baseName = fileName.split('.')[0].replace(/[-_]/g, ' ');
+  // Capitalize first letters
+  baseName = baseName.replace(/\b\w/g, (l) => l.toUpperCase());
+  
+  let customerName = baseName.length > 2 && !['invoice', 'qaima', 'faktura', 'document'].includes(baseName.toLowerCase()) 
+                     ? baseName 
+                     : "Xəzər Logistika";
+                     
   let invoiceNumber = "QM-" + Math.floor(100000 + Math.random() * 900000);
   let totalAmount = 4500;
   let items: InvoiceItem[] = [
     { name: "Texniki Avadanlıq Dəsti", quantity: 2, price: 1500, total: 3000 },
     { name: "Quraşdırma və Tənzimləmə xidməti", quantity: 1, price: 1500, total: 1500 }
   ];
-
-  if (fileName.toLowerCase().includes("baku") || fileName.toLowerCase().includes("retail")) {
-    customerName = "Baku Retail Group";
-    invoiceNumber = "QM-900452";
-    totalAmount = 2400;
-    items = [
-      { name: "Supermarket vitrin rəfləri", quantity: 8, price: 300, total: 2400 }
-    ];
-  } else if (fileName.toLowerCase().includes("absheron") || fileName.toLowerCase().includes("tikinti") || fileName.toLowerCase().includes("sement")) {
-    customerName = "Abşeron Tikinti MMC";
-    invoiceNumber = "QM-2026-99";
-    totalAmount = 12500;
-    items = [
-      { name: "Premium Sement (Ton)", quantity: 10, price: 150, total: 1500 },
-      { name: "M-400 Hazır Beton qarışığı (m³)", quantity: 100, price: 110, total: 11000 }
-    ];
-  } else if (isExcel) {
-    customerName = "Cənub Aqro MMC";
-    invoiceNumber = "QM-EXCEL-88";
-    totalAmount = 6750;
-    items = [
-      { name: "Üzvi gübrə (kisə)", quantity: 150, price: 30, total: 4500 },
-      { name: "Zərərvericilərə qarşı dərmanlama", quantity: 5, price: 450, total: 2250 }
-    ];
-  }
-
+  
   return {
     customerName,
     invoiceNumber,
