@@ -85,148 +85,9 @@ interface DBState {
 
 // Initial Sample Data in Azerbaijani
 const initialDB: DBState = {
-  customers: [
-    { id: "cust-1", name: "Abşeron Tikinti MMC", createdAt: "2026-06-01T10:00:00Z" },
-    { id: "cust-2", name: "Baku Retail Group", createdAt: "2026-06-02T11:00:00Z" },
-    { id: "cust-3", name: "Xəzər Logistika", createdAt: "2026-06-03T12:00:00Z" },
-    { id: "cust-4", name: "Gəncə Avtomobil Zavodu", createdAt: "2026-06-04T09:00:00Z" },
-    { id: "cust-5", name: "Cənub Aqro MMC", createdAt: "2026-06-05T08:00:00Z" }
-  ],
-  invoices: [
-    {
-      id: "inv-1",
-      invoiceNumber: "Q-2026-001",
-      customerName: "Abşeron Tikinti MMC",
-      invoiceDate: "2026-06-10",
-      totalAmount: 5450,
-      extracted: false,
-      createdAt: "2026-06-10T10:15:00Z",
-      status: "unpaid",
-      items: [
-        { name: "Sement (kisə)", quantity: 100, price: 8, total: 800 },
-        { name: "Armatur (ton)", quantity: 2, price: 1200, total: 2400 },
-        { name: "Beton M-350 (m³)", quantity: 25, price: 90, total: 2250 }
-      ]
-    },
-    {
-      id: "inv-2",
-      invoiceNumber: "Q-2026-002",
-      customerName: "Abşeron Tikinti MMC",
-      invoiceDate: "2026-06-20",
-      totalAmount: 7000,
-      extracted: false,
-      createdAt: "2026-06-20T14:30:00Z",
-      status: "unpaid",
-      items: [
-        { name: "Qranit plitələr (m²)", quantity: 140, price: 50, total: 7000 }
-      ]
-    },
-    {
-      id: "inv-3",
-      invoiceNumber: "Q-2026-003",
-      customerName: "Baku Retail Group",
-      invoiceDate: "2026-06-15",
-      totalAmount: 8300,
-      extracted: false,
-      createdAt: "2026-06-15T11:00:00Z",
-      status: "paid",
-      items: [
-        { name: "Soyuducu vitrin", quantity: 2, price: 2500, total: 5000 },
-        { name: "Barkod oxuyucu", quantity: 10, price: 150, total: 1500 },
-        { name: "ERP proqram lisenziyası", quantity: 1, price: 1800, total: 1800 }
-      ]
-    },
-    {
-      id: "inv-4",
-      invoiceNumber: "Q-2026-004",
-      customerName: "Xəzər Logistika",
-      invoiceDate: "2026-06-18",
-      totalAmount: 15200,
-      extracted: false,
-      createdAt: "2026-06-18T16:00:00Z",
-      status: "unpaid",
-      items: [
-        { name: "Yük maşını təkərləri", quantity: 16, price: 450, total: 7200 },
-        { name: "Mühərrik yağı Shell (litr)", quantity: 400, price: 15, total: 6000 },
-        { name: "Texniki xidmət", quantity: 1, price: 2000, total: 2000 }
-      ]
-    },
-    {
-      id: "inv-5",
-      invoiceNumber: "Q-2026-005",
-      customerName: "Gəncə Avtomobil Zavodu",
-      invoiceDate: "2026-06-22",
-      totalAmount: 42000,
-      extracted: false,
-      createdAt: "2026-06-22T09:45:00Z",
-      status: "unpaid",
-      items: [
-        { name: "Hidravlik pres avadanlığı", quantity: 1, price: 35000, total: 35000 },
-        { name: "Ehtiyat hissələri dəsti", quantity: 1, price: 7000, total: 7000 }
-      ]
-    },
-    {
-      id: "inv-6",
-      invoiceNumber: "Q-2026-006",
-      customerName: "Cənub Aqro MMC",
-      invoiceDate: "2026-06-25",
-      totalAmount: 3150,
-      extracted: false,
-      createdAt: "2026-06-25T13:20:00Z",
-      status: "unpaid",
-      items: [
-        { name: "Damcı suvarma boruları (metr)", quantity: 1500, price: 1.5, total: 2250 },
-        { name: "Su pompası", quantity: 1, price: 900, total: 900 }
-      ]
-    }
-  ],
-  payments: [
-    {
-      id: "pay-1",
-      customerId: "cust-1",
-      customerName: "Abşeron Tikinti MMC",
-      amount: 9000,
-      paymentDate: "2026-06-21",
-      note: "Qismən ödəniş (Bank köçürməsi)",
-      createdAt: "2026-06-21T11:00:00Z"
-    },
-    {
-      id: "pay-2",
-      customerId: "cust-2",
-      customerName: "Baku Retail Group",
-      amount: 8300,
-      paymentDate: "2026-06-16",
-      note: "Tam ödəniş",
-      createdAt: "2026-06-16T15:00:00Z"
-    },
-    {
-      id: "pay-3",
-      customerId: "cust-3",
-      customerName: "Xəzər Logistika",
-      amount: 5000,
-      paymentDate: "2026-06-22",
-      note: "Avans ödənişi",
-      createdAt: "2026-06-22T10:00:00Z"
-    },
-    {
-      id: "pay-4",
-      customerId: "cust-4",
-      customerName: "Gəncə Avtomobil Zavodu",
-      amount: 30000,
-      paymentDate: "2026-06-24",
-      note: "Avans ödənişi (Köçürmə ilə)",
-      createdAt: "2026-06-24T12:00:00Z"
-    },
-    {
-      id: "pay-5",
-      customerId: "cust-5",
-      customerName: "Cənub Aqro MMC",
-      amount: 1500,
-      paymentDate: "2026-06-26",
-      note: "Nəğd ödəniş",
-      createdAt: "2026-06-26T14:30:00Z"
-    }
-  ]
+  customers: [],
+  invoices: [],
+  payments: []
 };
 
 // Helper to read database state
@@ -836,7 +697,7 @@ async function parseInvoiceDeterministically(base64Data: string, fileName: strin
         const line = lines[i].toLowerCase();
         
         // Find customer name
-        if (!customerName && (line.includes("alıcı") || line.includes("müştəri") || line.includes("sifarişçi"))) {
+        if (!customerName && (line.includes("alıcı") || line.includes("müştəri") || line.includes("sifarişçi") || line.includes("şirkət"))) {
            const parts = lines[i].split(":");
            if (parts.length > 1 && parts[1].trim()) {
              customerName = parts[1].trim();
@@ -882,11 +743,8 @@ async function parseInvoiceDeterministically(base64Data: string, fileName: strin
         }
       }
       
-      let baseFileName = fileName.split('.')[0].replace(/[-_]/g, ' ');
-      baseFileName = baseFileName.replace(/\b\w/g, (l) => l.toUpperCase());
-      
       return {
-        customerName: customerName || (baseFileName.length > 2 ? baseFileName : "Xəzər Logistika"),
+        customerName: customerName || "",
         invoiceNumber: invoiceNumber || `QM-${Math.floor(100000 + Math.random() * 900000)}`,
         invoiceDate: invoiceDate || new Date().toISOString().split("T")[0],
         totalAmount: totalAmount || 0,
@@ -1223,7 +1081,7 @@ app.post("/api/invoices/upload", adminOrUser, async (req, res) => {
 
     const promptText = 
       "Sən peşəkar ERP qaimə oxuyucu sistemisən. Təqdim edilmiş sənədi (şəkil, PDF, yaxud Excel fəaliyyət vərəqi ola bilər) diqqətlə analiz et və aşağıdakı xanalara əsasən Azərbaycan dilində strukturlaşdırılmış məlumatları çıxar:\n" +
-      "1. customerName: Sənədi qəbul edən müştərinin və ya şirkətin dəqiq adı. Məsələn: 'Abşeron Tikinti MMC' və ya 'Baku Retail Group'. Müştəri adını təmizlə, artıq dırnaqları yığışdır.\n" +
+      "1. customerName: Qəti şəkildə YALNIZ sənəddə mövcud olan mətnə əsasən müştəri (və ya alıcı, şirkət) adını tap və yaz. Heç bir halda təxmin etmə və ya özündən əlavələr etmə. Mətnin içərisində 'Müştəri:', 'Alıcı:', 'Şirkət:' kimi açar sözləri axtar və qarşısındakı dəqiq adı çıxart. Özündən fərziyyələr uydurma. Müştəri adını təmizlə, artıq dırnaqları yığışdır.\n" +
       "2. invoiceNumber: Qaimənin nömrəsi və ya kodu. Tapılmasa 'QM-' ilə başlayan təsadüfi kod yarat.\n" +
       "3. invoiceDate: Qaimənin yazıldığı tarix YYYY-MM-DD formatında.\n" +
       "4. totalAmount: Qaimənin yekun ödəniş məbləği (rəqəm olaraq).\n" +
@@ -1317,7 +1175,7 @@ function simulateExtraction(fileName: string) {
   
   let customerName = baseName.length > 2 && !['invoice', 'qaima', 'faktura', 'document'].includes(baseName.toLowerCase()) 
                      ? baseName 
-                     : "Xəzər Logistika";
+                     : "Naməlum Müştəri";
                      
   let invoiceNumber = "QM-" + Math.floor(100000 + Math.random() * 900000);
   let totalAmount = 4500;
