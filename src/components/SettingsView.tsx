@@ -250,15 +250,26 @@ export default function SettingsView({ onResetDB, currency, userInfo, onUpdateSe
                       }
                     });
                     if (res.ok) {
-                      const blob = await res.blob();
+                      const dbData = await res.json();
+                      const fullBackup = {
+                        _isFullBackup: true,
+                        database: dbData,
+                        localStorage: {
+                          profitPaidInvoices: localStorage.getItem("profitPaidInvoices"),
+                          globalProductCosts: localStorage.getItem("globalProductCosts"),
+                          erp_currency: localStorage.getItem("erp_currency"),
+                          erp_user_info: localStorage.getItem("erp_user_info")
+                        }
+                      };
+                      const blob = new Blob([JSON.stringify(fullBackup, null, 2)], { type: "application/json" });
                       const url = window.URL.createObjectURL(blob);
                       const a = document.createElement("a");
                       a.href = url;
-                      a.download = `erp_backup_${new Date().toISOString().split('T')[0]}.json`;
+                      a.download = `erp_backup_full_${new Date().toISOString().split('T')[0]}.json`;
                       document.body.appendChild(a);
                       a.click();
                       document.body.removeChild(a);
-                      if(showToast) showToast("Backup uğurla yükləndi!", "success");
+                      if(showToast) showToast("Bütün məlumatlar (Backup) uğurla yükləndi!", "success");
                     } else {
                       if(showToast) showToast("Backup yüklənərkən xəta baş verdi.", "error");
                     }
@@ -289,6 +300,18 @@ export default function SettingsView({ onResetDB, currency, userInfo, onUpdateSe
                       reader.onload = async (event) => {
                         try {
                           const data = JSON.parse(event.target?.result as string);
+                          
+                          let dbDataToRestore = data;
+                          if (data._isFullBackup) {
+                            dbDataToRestore = data.database;
+                            if (data.localStorage) {
+                              if (data.localStorage.profitPaidInvoices !== null) localStorage.setItem("profitPaidInvoices", data.localStorage.profitPaidInvoices);
+                              if (data.localStorage.globalProductCosts !== null) localStorage.setItem("globalProductCosts", data.localStorage.globalProductCosts);
+                              if (data.localStorage.erp_currency !== null) localStorage.setItem("erp_currency", data.localStorage.erp_currency);
+                              if (data.localStorage.erp_user_info !== null) localStorage.setItem("erp_user_info", data.localStorage.erp_user_info);
+                            }
+                          }
+
                           const savedUser = localStorage.getItem("erp_user");
                           const userObj = savedUser ? JSON.parse(savedUser) : null;
                           const res = await fetch("/api/restore", {
@@ -298,7 +321,7 @@ export default function SettingsView({ onResetDB, currency, userInfo, onUpdateSe
                               "x-user-role": userObj?.role || "",
                               "x-user-username": userObj?.username || ""
                             },
-                            body: JSON.stringify(data)
+                            body: JSON.stringify(dbDataToRestore)
                           });
                           if (res.ok) {
                             if(showToast) showToast("Məlumatlar uğurla bərpa edildi! Səhifə yenilənir...", "success");
