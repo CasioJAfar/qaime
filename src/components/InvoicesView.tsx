@@ -58,6 +58,7 @@ export default function InvoicesView({
   const [pendingInvoiceConfirm, setPendingInvoiceConfirm] = useState<{
     invoiceNumber: string;
     customerName: string;
+    customerCode?: string;
     invoiceDate: string;
     totalAmount: number;
     items: InvoiceItem[];
@@ -72,6 +73,7 @@ export default function InvoicesView({
   // Manual Creation State
   const [showManualModal, setShowManualModal] = useState(false);
   const [manualCustomer, setManualCustomer] = useState("");
+  const [manualCustomerCode, setManualCustomerCode] = useState("");
   const [manualInvoiceNo, setManualInvoiceNo] = useState("");
   const [manualDate, setManualDate] = useState(new Date().toISOString().split("T")[0]);
   const [manualItems, setManualItems] = useState<InvoiceItem[]>([
@@ -366,6 +368,7 @@ export default function InvoicesView({
       setPendingInvoiceConfirm({
         invoiceNumber: extractedData.invoiceNumber || `QM-${Math.floor(100000 + Math.random() * 900000)}`,
         customerName: extractedData.customerName || "Naməlum Müştəri",
+        customerCode: extractedData.receiverVOEN || extractedData.customerCode || "",
         invoiceDate: extractedData.invoiceDate || new Date().toISOString().split('T')[0],
         totalAmount: Number(extractedData.totalAmount) || 0,
         items: extractedData.items || [],
@@ -404,6 +407,7 @@ export default function InvoicesView({
         body: JSON.stringify({
           invoiceNumber: pendingInvoiceConfirm.invoiceNumber,
           customerName: pendingInvoiceConfirm.customerName,
+          customerCode: pendingInvoiceConfirm.customerCode,
           invoiceDate: pendingInvoiceConfirm.invoiceDate,
           totalAmount: pendingInvoiceConfirm.totalAmount,
           items: pendingInvoiceConfirm.items,
@@ -494,6 +498,7 @@ export default function InvoicesView({
         body: JSON.stringify({
           invoiceNumber: manualInvoiceNo || `QM-${Math.floor(100000 + Math.random() * 900000)}`,
           customerName: manualCustomer,
+          customerCode: manualCustomerCode,
           invoiceDate: manualDate,
           totalAmount,
           items: manualItems
@@ -505,6 +510,7 @@ export default function InvoicesView({
       setShowManualModal(false);
       // Reset form
       setManualCustomer("");
+      setManualCustomerCode("");
       setManualInvoiceNo("");
       setManualDate(new Date().toISOString().split("T")[0]);
       setManualItems([{ name: "", quantity: 1, price: 0, total: 0 }]);
@@ -733,7 +739,14 @@ export default function InvoicesView({
                       }`}
                     >
                       <td className="px-6 py-3.5 font-mono font-bold text-slate-900 text-sm">{inv.invoiceNumber}</td>
-                      <td className="px-6 py-3.5 font-semibold text-slate-700 text-sm">{inv.customerName}</td>
+                      <td className="px-6 py-3.5">
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-slate-700 text-sm">{inv.customerName}</span>
+                          {inv.customerCode && (
+                            <span className="text-[10px] text-slate-500 font-mono mt-0.5">{inv.customerCode}</span>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-6 py-3.5 text-xs text-slate-500">{inv.invoiceDate}</td>
                       <td className="px-4 py-3.5 text-right font-mono font-semibold text-slate-600 text-xs">{formatAZN(inv.totalAmount / 1.18)}</td>
                       <td className="px-4 py-3.5 text-right font-mono font-semibold text-amber-600 text-xs">{formatAZN((inv.totalAmount * 0.18) / 1.18)}</td>
@@ -832,7 +845,12 @@ export default function InvoicesView({
                   <div className="space-y-1 mb-3">
                     <div className="flex justify-between text-xs gap-2">
                       <span className="text-slate-400 font-medium shrink-0">Müştəri:</span>
-                      <span className="font-semibold text-slate-800 truncate" title={inv.customerName}>{inv.customerName}</span>
+                      <div className="flex flex-col text-right">
+                        <span className="font-semibold text-slate-800 truncate" title={inv.customerName}>{inv.customerName}</span>
+                        {inv.customerCode && (
+                          <span className="text-[10px] text-slate-500 font-mono mt-0.5">{inv.customerCode}</span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="text-slate-400 font-medium">Tarix:</span>
@@ -938,7 +956,12 @@ export default function InvoicesView({
             <div className="space-y-3">
               <div>
                 <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-0.5">Qəbul Edən Müştəri</span>
-                <span className="text-sm font-bold text-slate-800">{selectedInvoice.customerName}</span>
+                <div className="flex flex-col">
+                  <span className="text-sm font-bold text-slate-800">{selectedInvoice.customerName}</span>
+                  {selectedInvoice.customerCode && (
+                    <span className="text-[10px] text-slate-500 font-mono mt-0.5">{selectedInvoice.customerCode}</span>
+                  )}
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -1059,7 +1082,7 @@ export default function InvoicesView({
 
             {/* Form */}
             <form onSubmit={handleManualSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="md:col-span-2">
                   <label className="text-[10px] font-bold text-slate-400 block mb-1.5 uppercase tracking-wider">Müştəri Adı</label>
                   <input 
@@ -1069,6 +1092,16 @@ export default function InvoicesView({
                     onChange={(e) => setManualCustomer(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-900 focus:outline-hidden focus:border-indigo-500"
                     required
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 block mb-1.5 uppercase tracking-wider">Müştəri Kodu</label>
+                  <input 
+                    type="text" 
+                    placeholder="Məs. 12345678"
+                    value={manualCustomerCode}
+                    onChange={(e) => setManualCustomerCode(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-900 focus:outline-hidden focus:border-indigo-500 font-mono"
                   />
                 </div>
                 <div>
@@ -1241,7 +1274,7 @@ export default function InvoicesView({
 
             {/* Form */}
             <form onSubmit={handleConfirmSaveSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="md:col-span-2">
                   <label className="text-[10px] font-bold text-slate-400 block mb-1.5 uppercase tracking-wider">Müştəri Adı</label>
                   <input 
@@ -1253,6 +1286,18 @@ export default function InvoicesView({
                     })}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-900 focus:outline-hidden focus:border-indigo-500 font-semibold"
                     required
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 block mb-1.5 uppercase tracking-wider">Müştəri Kodu (VÖEN)</label>
+                  <input 
+                    type="text" 
+                    value={pendingInvoiceConfirm.customerCode || ""}
+                    onChange={(e) => setPendingInvoiceConfirm({
+                      ...pendingInvoiceConfirm,
+                      customerCode: e.target.value
+                    })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-900 focus:outline-hidden focus:border-indigo-500 font-mono"
                   />
                 </div>
                 <div>

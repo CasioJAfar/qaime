@@ -49,6 +49,7 @@ export default function CustomersView({
   const isAdmin = savedUser ? JSON.parse(savedUser).role === "admin" : false;
   const [showAddModal, setShowAddModal] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerCode, setNewCustomerCode] = useState("");
   
   // Custom inline deletion confirmation state
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -138,7 +139,7 @@ export default function CustomersView({
       const res = await fetch("/api/customers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newCustomerName })
+        body: JSON.stringify({ name: newCustomerName, code: newCustomerCode })
       });
 
       if (!res.ok) {
@@ -150,6 +151,7 @@ export default function CustomersView({
         showToast("Müştəri uğurla əlavə edildi!", "success");
       }
       setNewCustomerName("");
+      setNewCustomerCode("");
       setShowAddModal(false);
       onCustomerAdded();
     } catch (err: any) {
@@ -231,10 +233,15 @@ export default function CustomersView({
                           >
                             <td className="px-6 py-3.5">
                               <div className="flex items-center space-x-3">
-                                <div className="w-8 h-8 rounded bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-xs font-display">
+                                <div className="w-8 h-8 rounded bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-xs font-display shrink-0">
                                   {cust.name.substring(0, 2).toUpperCase()}
                                 </div>
-                                <span className="font-semibold text-slate-700 text-sm">{cust.name}</span>
+                                <div className="flex flex-col">
+                                  <span className="font-semibold text-slate-700 text-sm">{cust.name}</span>
+                                  {cust.code && (
+                                    <span className="text-[10px] text-slate-500 font-mono mt-0.5">{cust.code}</span>
+                                  )}
+                                </div>
                               </div>
                             </td>
                             <td className="px-6 py-3.5 text-center text-sm font-mono text-slate-500">
@@ -323,7 +330,12 @@ export default function CustomersView({
                           <div className="w-8 h-8 rounded bg-indigo-500/10 text-indigo-700 flex items-center justify-center font-bold text-xs font-display shrink-0">
                             {cust.name.substring(0, 2).toUpperCase()}
                           </div>
-                          <span className="font-bold text-slate-800 text-sm truncate">{cust.name}</span>
+                          <div className="flex flex-col min-w-0 flex-1">
+                            <span className="font-bold text-slate-800 text-sm truncate">{cust.name}</span>
+                            {cust.code && (
+                              <span className="text-[10px] text-slate-500 font-mono mt-0.5 truncate">{cust.code}</span>
+                            )}
+                          </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs mb-3 pb-3 border-b border-dashed border-slate-200">
@@ -683,6 +695,17 @@ export default function CustomersView({
                   onChange={(e) => setNewCustomerName(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-indigo-500"
                   required
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Müştəri Kodu (VÖEN) (İstəyə bağlı)</label>
+                <input 
+                  type="text" 
+                  placeholder="Məs. 3103396091"
+                  value={newCustomerCode}
+                  onChange={(e) => setNewCustomerCode(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-indigo-500 font-mono"
                 />
               </div>
 

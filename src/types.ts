@@ -9,6 +9,7 @@ export interface Invoice {
   id: string;
   invoiceNumber: string;
   customerName: string;
+  customerCode?: string;
   invoiceDate: string;
   totalAmount: number;
   items: InvoiceItem[];
@@ -22,6 +23,7 @@ export interface Invoice {
 export interface Customer {
   id: string;
   name: string;
+  code?: string;
   createdAt: string;
   totalAmount: number;
   paidAmount: number;

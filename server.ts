@@ -341,7 +341,7 @@ app.get("/api/invoices", (req, res) => {
 
 // Add manual invoice
 app.post("/api/invoices", adminOrUser, (req, res) => {
-  const { invoiceNumber, customerName, invoiceDate, totalAmount, items, sourceFile, sourceFileType } = req.body;
+  const { invoiceNumber, customerName, customerCode, invoiceDate, totalAmount, items, sourceFile, sourceFileType } = req.body;
   
   if (!customerName || !totalAmount) {
     return res.status(400).json({ error: "Müştəri adı və yekun məbləğ vacibdir." });
@@ -353,16 +353,20 @@ app.post("/api/invoices", adminOrUser, (req, res) => {
   const formattedCustomerName = customerName.trim();
   
   // Create or find customer in database
-  const customerExists = db.customers.some(
+  let customer = db.customers.find(
     c => c.name.toLowerCase().trim() === formattedCustomerName.toLowerCase().trim()
   );
   
-  if (!customerExists) {
+  if (!customer) {
     db.customers.push({
       id: "cust-" + Date.now(),
       name: formattedCustomerName,
+      code: customerCode,
       createdAt: new Date().toISOString()
     });
+  } else if (customerCode && !customer.code) {
+    // If we have a code now, and didn't before, let's update it
+    customer.code = customerCode;
   }
 
   const num = invoiceNumber || `QM-${Math.floor(100000 + Math.random() * 900000)}`;
@@ -370,6 +374,7 @@ app.post("/api/invoices", adminOrUser, (req, res) => {
     id: "inv-" + Date.now(),
     invoiceNumber: num,
     customerName: formattedCustomerName,
+    customerCode,
     invoiceDate: invoiceDate || new Date().toISOString().split('T')[0],
     totalAmount: Number(totalAmount),
     items: items || [],
@@ -463,7 +468,7 @@ app.get("/api/customers", (req, res) => {
 
 // Add manual customer
 app.post("/api/customers", adminOrUser, (req, res) => {
-  const { name } = req.body;
+  const { name, code } = req.body;
   if (!name) {
     return res.status(400).json({ error: "Müştəri adı vacibdir." });
   }
@@ -482,6 +487,7 @@ app.post("/api/customers", adminOrUser, (req, res) => {
   const newCustomer: Customer = {
     id: "cust-" + Date.now(),
     name: formattedName,
+    code,
     createdAt: new Date().toISOString()
   };
 
