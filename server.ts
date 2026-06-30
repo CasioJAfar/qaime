@@ -33,6 +33,7 @@ interface Invoice {
   id: string;
   invoiceNumber: string;
   customerName: string;
+  customerCode?: string;
   invoiceDate: string;
   totalAmount: number;
   items: InvoiceItem[];
@@ -46,6 +47,7 @@ interface Invoice {
 interface Customer {
   id: string;
   name: string;
+  code?: string;
   createdAt: string;
 }
 
@@ -177,6 +179,7 @@ function normalizeCustomerName(name: string): string {
   return name
     .replace(/(MMC|ASC|LTD|LLC|şirkəti|firması)/gi, "")
     .replace(/["'“”«»]/g, "")
+    .replace(/[0-9]/g, "") // Remove all numbers from the name
     .trim()
     .replace(/\s+/g, " ") + " MMC"; // standard ERP display
 }
@@ -631,12 +634,54 @@ async function parseInvoiceDeterministically(base64Data: string, fileName: strin
     
     const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter((l: string) => l.length > 0);
     
+    console.log("----- PDF LINES START -----");
+    console.log(lines.slice(0, 20).join("\n"));
+    console.log("----- PDF LINES END -----");
+    
     let customerName = "";
     let invoiceNumber = "";
     let invoiceDate = "";
     let totalAmount = 0;
     let items: any[] = [];
     
+    // 1. Initial pass to find the invoice number exactly as user requested.
+    // User requested specifically matching "nömrə:" and taking the numbers.
+    // They explicitly said "nömrəsi başqa yerdədi", so we focus on "nömrə:".
+    
+    // Attempt 1: "Nömrə: 12345" or "Nömrə: QM-12345" (can include letters, hyphens, and can be >= 3 chars)
+    const strictNomreMatch = text.match(/n[öo]mr[əe]\s*:\s*([A-Za-z0-9-]{3,})/i);
+    if (strictNomreMatch) {
+       let num = strictNomreMatch[1].replace(/tarix.*/i, '').trim();
+       if (/\d/.test(num)) invoiceNumber = num;
+    }
+    
+    // Attempt 2: "12345 Nömrə:" 
+    if (!invoiceNumber) {
+       const reverseNomreMatch = text.match(/([A-Za-z0-9-]{3,})\s*n[öo]mr[əe]\s*:/i);
+       if (reverseNomreMatch) {
+          let num = reverseNomreMatch[1].trim();
+          if (/\d/.test(num)) invoiceNumber = num;
+       }
+    }
+    
+    // Attempt 3: "12345 Tarix"
+    if (!invoiceNumber) {
+       const tarixMatch = text.match(/([A-Za-z0-9-]{3,})\s*tarix/i);
+       if (tarixMatch) {
+          let num = tarixMatch[1].trim();
+          if (/\d/.test(num)) invoiceNumber = num;
+       }
+    }
+    
+    // Attempt 4: "Seriya ... Nömrə: ..."
+    if (!invoiceNumber) {
+       const seriyaMatch = text.match(/Seriya[\s:]*[A-Za-z0-9-]+.*?n[öo]mr[əe][\s:]*([A-Za-z0-9-]{3,})/i);
+       if (seriyaMatch) {
+          let num = seriyaMatch[1].trim();
+          if (/\d/.test(num)) invoiceNumber = num;
+       }
+    }
+
     let extraData: any = {
        senderName: "",
        senderVOEN: "",
@@ -652,13 +697,7 @@ async function parseInvoiceDeterministically(base64Data: string, fileName: strin
       const line = lines[i];
       const lowerLine = line.toLowerCase();
       
-      // Nömrə və Tarix ayrı sətirlərdə ola bilər
-      const numMatch = line.match(/Nömrə:\s*([A-Za-z0-9-]+)/i) || line.match(/Qaimə №:\s*([A-Za-z0-9-]+)/i);
-      const dateMatch = line.match(/Tarix:\s*([\d.]+)/i) || line.match(/Tarixi:\s*([\d.]+)/i);
-      
-      if (numMatch) {
-         invoiceNumber = numMatch[1];
-      }
+      const dateMatch = line.match(/Tarix(?:i|)[\s:]*([\d.]+)/i);
       if (dateMatch) {
          const parts = dateMatch[1].split(/[./-]/);
          if (parts.length >= 3) {
@@ -669,12 +708,6 @@ async function parseInvoiceDeterministically(base64Data: string, fileName: strin
                invoiceDate = dateMatch[1];
             }
          }
-      }
-
-      // Seriya, Nömrə, Tarix eyni sətirdə olarsa
-      if (lowerLine.includes("seriya:") && lowerLine.includes("nömrə:") && lowerLine.includes("tarix:")) {
-        const serMatch = line.match(/Seriya:\s*([A-Za-z0-9]+)/i);
-        if (serMatch && numMatch) invoiceNumber = serMatch[1] + "-" + numMatch[1];
       }
       
       // Göndərən
@@ -688,7 +721,8 @@ async function parseInvoiceDeterministically(base64Data: string, fileName: strin
       
       // Qəbul edən
       if (lowerLine.includes("qəbul edən:") || lowerLine.includes("alıcı:")) {
-        const match = line.match(/(?:Qəbul edən|Alıcı):\s*(?:VÖEN\s+)?([\d]{5,15})\s+(.+)/i);
+        // Find if VOEN is directly attached
+        const match = line.match(/(?:Qəbul edən|Alıcı):\s*(?:V[öo]en[\s:]*)?([\d]{5,15})[\s-]+(.+)/i);
         if (match) {
           extraData.receiverVOEN = match[1].replace(/\s+/g, '');
           customerName = match[2].trim().replace(/^"|"$/g, '');
@@ -701,15 +735,21 @@ async function parseInvoiceDeterministically(base64Data: string, fileName: strin
            }
         }
         
-        // Şirkət adının əvvəlində rəqəm (VÖEN/KOD) varsa onları ayıraq
+        // Extract VOEN if it is still hiding inside customerName
         if (customerName) {
-           // 5-dən çox rəqəmdən ibarət sözlə başlayan sətirləri VÖEN kimi qəbul edək
-           const leadingNumbersMatch = customerName.match(/^(\d{5,})\s+(.+)$/);
-           if (leadingNumbersMatch) {
+           const voenMatch = customerName.match(/(?:V[öo]en[\s:]*)?(\d{8,15})/i);
+           if (voenMatch) {
               if (!extraData.receiverVOEN) {
-                 extraData.receiverVOEN = leadingNumbersMatch[1];
+                 extraData.receiverVOEN = voenMatch[1];
               }
-              customerName = leadingNumbersMatch[2].trim().replace(/^"|"$/g, '');
+              // Remove VOEN and the word VÖEN from customerName
+              customerName = customerName.replace(voenMatch[0], '').replace(/^[\s-:]+/, '').replace(/[\s-:]+$/, '').trim();
+              customerName = customerName.replace(/^"|"$/g, '');
+           }
+           
+           // Əgər ad çox qısadırsa və ya boş qalıbsa, növbəti sətiri götürək
+           if (customerName.length < 3 && i + 1 < lines.length) {
+              customerName = lines[i+1].trim().replace(/_+$/, "").trim();
            }
         }
       }
@@ -787,7 +827,9 @@ async function parseInvoiceDeterministically(base64Data: string, fileName: strin
     // Add extraData to return for the frontend to see it (even if it just displays it)
     return {
       customerName: customerName || "Naməlum Müştəri",
+      customerCode: extraData.receiverVOEN || "",
       invoiceNumber: invoiceNumber || `QM-${Math.floor(100000 + Math.random() * 900000)}`,
+      invoice_number: invoiceNumber || `QM-${Math.floor(100000 + Math.random() * 900000)}`, // Requested by user
       invoiceDate: invoiceDate || new Date().toISOString().split("T")[0],
       totalAmount: totalAmount || 0,
       items: items.length > 0 ? items : [{

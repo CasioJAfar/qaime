@@ -54,6 +54,13 @@ export default function InvoicesView({
   // Custom inline deletion confirmation state
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
+  // Duplicate Check Custom Modal State
+  const [duplicateConfirm, setDuplicateConfirm] = useState<{
+    invoiceNumber: string;
+    customerName: string;
+    onConfirm: () => void;
+  } | null>(null);
+
   // PDF Review & Confirm-Before-Save workflow state
   const [pendingInvoiceConfirm, setPendingInvoiceConfirm] = useState<{
     invoiceNumber: string;
@@ -406,52 +413,62 @@ export default function InvoicesView({
       inv.customerName.toLowerCase() === pendingInvoiceConfirm.customerName.toLowerCase()
     );
     
+    const performSave = async () => {
+      try {
+        const saveRes = await fetch("/api/invoices", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            invoiceNumber: pendingInvoiceConfirm.invoiceNumber,
+            customerName: pendingInvoiceConfirm.customerName,
+            customerCode: pendingInvoiceConfirm.customerCode,
+            invoiceDate: pendingInvoiceConfirm.invoiceDate,
+            totalAmount: pendingInvoiceConfirm.totalAmount,
+            items: pendingInvoiceConfirm.items,
+            sourceFile: pendingInvoiceConfirm.sourceFile,
+            sourceFileType: pendingInvoiceConfirm.sourceFileType
+          })
+        });
+
+        if (!saveRes.ok) {
+          throw new Error("Məlumatlar yaddaşa verilərkən xəta baş verdi.");
+        }
+
+        const savedInvoice = await saveRes.json();
+        
+        setUploadSuccessMsg(
+          pendingInvoiceConfirm.isDemoFallback 
+            ? `Sənəd simulyasiya edildi və sistemə uğurla yazıldı: Müştəri - ${pendingInvoiceConfirm.customerName}, Məbləğ - ${formatAZN(pendingInvoiceConfirm.totalAmount)}`
+            : `Məlumat uğurla təsdiqləndi və sistemə yazıldı: Müştəri - ${pendingInvoiceConfirm.customerName}, Məbləğ - ${formatAZN(pendingInvoiceConfirm.totalAmount)}`
+        );
+        
+        setPendingInvoiceConfirm(null);
+        onInvoiceCreated();
+        onSelectInvoice(savedInvoice);
+
+      } catch (err: any) {
+        console.error(err);
+        setUploadError(err.message || "Məlumatların qeydə alınmasında xəta baş verdi.");
+      } finally {
+        setUploading(false);
+      }
+    };
+
     if (isDuplicate) {
-      const isConfirmed = window.confirm(`Bu qaimə nömrəsi (${pendingInvoiceConfirm.invoiceNumber}) artıq bu müştəri (${pendingInvoiceConfirm.customerName}) üçün mövcuddur. Təkrar qaimədir, yenə də əlavə edilsin?`);
-      if (!isConfirmed) {
-         setUploading(false);
-         return;
-      }
-    }
-
-    try {
-      const saveRes = await fetch("/api/invoices", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          invoiceNumber: pendingInvoiceConfirm.invoiceNumber,
-          customerName: pendingInvoiceConfirm.customerName,
-          customerCode: pendingInvoiceConfirm.customerCode,
-          invoiceDate: pendingInvoiceConfirm.invoiceDate,
-          totalAmount: pendingInvoiceConfirm.totalAmount,
-          items: pendingInvoiceConfirm.items,
-          sourceFile: pendingInvoiceConfirm.sourceFile,
-          sourceFileType: pendingInvoiceConfirm.sourceFileType
-        })
-      });
-
-      if (!saveRes.ok) {
-        throw new Error("Məlumatlar yaddaşa verilərkən xəta baş verdi.");
-      }
-
-      const savedInvoice = await saveRes.json();
-      
-      setUploadSuccessMsg(
-        pendingInvoiceConfirm.isDemoFallback 
-          ? `Sənəd simulyasiya edildi və sistemə uğurla yazıldı: Müştəri - ${pendingInvoiceConfirm.customerName}, Məbləğ - ${formatAZN(pendingInvoiceConfirm.totalAmount)}`
-          : `Məlumat uğurla təsdiqləndi və sistemə yazıldı: Müştəri - ${pendingInvoiceConfirm.customerName}, Məbləğ - ${formatAZN(pendingInvoiceConfirm.totalAmount)}`
-      );
-      
-      setPendingInvoiceConfirm(null);
-      onInvoiceCreated();
-      onSelectInvoice(savedInvoice);
-
-    } catch (err: any) {
-      console.error(err);
-      setUploadError(err.message || "Məlumatların qeydə alınmasında xəta baş verdi.");
-    } finally {
       setUploading(false);
+      setDuplicateConfirm({
+        invoiceNumber: pendingInvoiceConfirm.invoiceNumber,
+        customerName: pendingInvoiceConfirm.customerName,
+        onConfirm: () => {
+          setDuplicateConfirm(null);
+          setUploading(true);
+          performSave();
+        }
+      });
+      return;
     }
+
+    performSave();
   };
 
   const onDragOver = (e: React.DragEvent) => {
@@ -512,41 +529,50 @@ export default function InvoicesView({
       inv.customerName.toLowerCase() === manualCustomer.toLowerCase()
     );
     
-    if (isDuplicate) {
-      const isConfirmed = window.confirm(`Bu qaimə nömrəsi (${num}) artıq bu müştəri (${manualCustomer}) üçün mövcuddur. Təkrar qaimədir, yenə də əlavə edilsin?`);
-      if (!isConfirmed) {
-         return;
+    const performManualSave = async () => {
+      try {
+        const res = await fetch("/api/invoices", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            invoiceNumber: num,
+            customerName: manualCustomer,
+            customerCode: manualCustomerCode,
+            invoiceDate: manualDate,
+            totalAmount,
+            items: manualItems
+          })
+        });
+
+        if (!res.ok) throw new Error("Qaimə əlavə edilmədi.");
+        
+        setShowManualModal(false);
+        // Reset form
+        setManualCustomer("");
+        setManualCustomerCode("");
+        setManualInvoiceNo("");
+        setManualDate(new Date().toISOString().split("T")[0]);
+        setManualItems([{ name: "", quantity: 1, price: 0, total: 0 }]);
+        
+        onInvoiceCreated();
+      } catch (err: any) {
+        alert(err.message);
       }
-    }
+    };
 
-    try {
-      const res = await fetch("/api/invoices", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          invoiceNumber: num,
-          customerName: manualCustomer,
-          customerCode: manualCustomerCode,
-          invoiceDate: manualDate,
-          totalAmount,
-          items: manualItems
-        })
+    if (isDuplicate) {
+      setDuplicateConfirm({
+        invoiceNumber: num,
+        customerName: manualCustomer,
+        onConfirm: () => {
+          setDuplicateConfirm(null);
+          performManualSave();
+        }
       });
-
-      if (!res.ok) throw new Error("Qaimə əlavə edilmədi.");
-      
-      setShowManualModal(false);
-      // Reset form
-      setManualCustomer("");
-      setManualCustomerCode("");
-      setManualInvoiceNo("");
-      setManualDate(new Date().toISOString().split("T")[0]);
-      setManualItems([{ name: "", quantity: 1, price: 0, total: 0 }]);
-      
-      onInvoiceCreated();
-    } catch (err: any) {
-      alert(err.message);
+      return;
     }
+
+    performManualSave();
   };
 
   const handleDeleteInvoice = async (id: string) => {
@@ -1430,6 +1456,37 @@ export default function InvoicesView({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Duplicate Confirmation Modal */}
+      {duplicateConfirm && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-6">
+              <h3 className="text-lg font-bold text-slate-900 mb-2">Təkrar Qaimə Xəbərdarlığı</h3>
+              <p className="text-sm text-slate-600 leading-relaxed mb-6">
+                Bu qaimə nömrəsi (<span className="font-mono font-bold text-slate-900">{duplicateConfirm.invoiceNumber}</span>) artıq <span className="font-semibold text-slate-900">{duplicateConfirm.customerName}</span> üçün mövcuddur. Təkrar qaimədir, yenə də əlavə edilsin?
+              </p>
+              
+              <div className="flex items-center justify-end space-x-3 pt-4 border-t border-slate-100">
+                <button 
+                  type="button"
+                  onClick={() => setDuplicateConfirm(null)}
+                  className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                >
+                  Xeyr, ləğv et
+                </button>
+                <button 
+                  type="button"
+                  onClick={duplicateConfirm.onConfirm}
+                  className="px-4 py-2 rounded-lg text-sm font-bold bg-amber-500 hover:bg-amber-600 text-white transition shadow-sm cursor-pointer"
+                >
+                  Bəli, əlavə et
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
