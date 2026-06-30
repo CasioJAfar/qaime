@@ -640,14 +640,29 @@ async function parseInvoiceDeterministically(base64Data: string, fileName: strin
       let invoiceNumber = "";
       let invoiceDate = "";
       let totalAmount = 0;
+      let items: any[] = [];
       
-      // Search line by line
+      // Parse specific fields according to user instructions
+      let inTable = false;
+      let possibleItems: any[] = [];
+      
       for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].toLowerCase();
+        const line = lines[i];
+        const lowerLine = line.toLowerCase();
         
-        // Find customer name
-        if (!customerName && (line.includes("alıcı") || line.includes("müştəri") || line.includes("sifarişçi") || line.includes("şirkət"))) {
-           const parts = lines[i].split(":");
+        // Find Qəbul edən (Customer Name)
+        if (!customerName && lowerLine.includes("qəbul edən:")) {
+           const parts = line.split(/qəbul edən:/i);
+           if (parts.length > 1 && parts[1].trim() && !parts[1].trim().match(/^_/)) { // avoid "_____"
+             customerName = parts[1].trim().replace(/_+$/, "").trim();
+           } else if (i + 1 < lines.length) {
+             customerName = lines[i+1].trim().replace(/_+$/, "").trim();
+           }
+        }
+        
+        // Find customer name fallback
+        if (!customerName && (lowerLine.includes("alıcı:") || lowerLine.includes("müştəri:") || lowerLine.includes("sifarişçi:") || lowerLine.includes("şirkət:"))) {
+           const parts = line.split(/:/);
            if (parts.length > 1 && parts[1].trim()) {
              customerName = parts[1].trim();
            } else if (i + 1 < lines.length) {
@@ -656,49 +671,115 @@ async function parseInvoiceDeterministically(base64Data: string, fileName: strin
         }
         
         // Try to guess customer name if not found with keywords (look for typical company endings)
-        if (!customerName && (line.includes("mmc") || line.includes("qsc") || line.includes("asc") || line.includes("şirkəti"))) {
-           customerName = lines[i].trim();
+        if (!customerName && (lowerLine.includes("mmc") || lowerLine.includes("qsc") || lowerLine.includes("asc"))) {
+           customerName = line.trim();
         }
         
-        // Find invoice number
-        if (!invoiceNumber && (line.includes("qaimə") || line.includes("faktura") || line.includes("sənəd") || line.includes("№"))) {
-          const match = lines[i].match(/(QM-\d+|\d{5,})/i);
-          if (match) {
-            invoiceNumber = match[0];
-          }
+        // Find invoice number: Seriya: **** Nömrə: *****
+        if (!invoiceNumber && lowerLine.includes("nömrə:")) {
+           const match = line.match(/(Seriya[\s:]+[\w-]+\s*)?Nömrə[\s:]+([A-Za-z0-9-]+)/i);
+           if (match) {
+             invoiceNumber = match[0].replace(/\s+/g, ' ').trim();
+           } else {
+             const parts = line.split(/nömrə:/i);
+             if (parts.length > 1) {
+               invoiceNumber = parts[1].trim().split(" ")[0]; // Take first word after nömrə
+             }
+           }
+        }
+        if (!invoiceNumber && lowerLine.includes("nömrə")) {
+           const parts = line.split(/nömrə/i);
+           if (parts.length > 1) {
+             invoiceNumber = parts[1].trim().replace(/^[:\s]+/, "").split(" ")[0]; 
+           }
         }
         
-        // Find date
+        // Find date: Tarix
+        if (!invoiceDate && lowerLine.includes("tarix")) {
+           // Look for date pattern like DD.MM.YYYY or DD/MM/YYYY or DD-MM-YYYY
+           const match = line.match(/(\d{2})[./-](\d{2})[./-](\d{4})/);
+           if (match) {
+             invoiceDate = `${match[3]}-${match[2]}-${match[1]}`;
+           }
+        }
         if (!invoiceDate) {
-          const match = lines[i].match(/(\d{2})[./-](\d{2})[./-](\d{4})/);
-          if (match) {
-            invoiceDate = `${match[3]}-${match[2]}-${match[1]}`;
-          }
+           const match = line.match(/(\d{2})[./-](\d{2})[./-](\d{4})/);
+           if (match) {
+             invoiceDate = `${match[3]}-${match[2]}-${match[1]}`;
+           }
         }
         
-        // Find total
-        if (!totalAmount && (line.includes("cəmi") || line.includes("yekun") || line.includes("ödəniləcək"))) {
-          const parts = lines[i].split(":");
-          let amtStr = parts.length > 1 ? parts[1] : lines[i];
-          const num = parseFloat(amtStr.replace(/[^0-9.,]/g, "").replace(",", "."));
-          if (!isNaN(num) && num > 0) {
-            totalAmount = num;
-          } else if (i + 1 < lines.length) {
-            const nextNum = parseFloat(lines[i+1].replace(/[^0-9.,]/g, "").replace(",", "."));
-            if (!isNaN(nextNum) && nextNum > 0) {
-              totalAmount = nextNum;
-            }
-          }
+        // Find Yekun məbləğ (manatla)
+        if (lowerLine.includes("yekun məbləğ") || lowerLine.includes("cəmi məbləğ") || lowerLine.includes("ödəniləcək") || lowerLine.includes("yekun:")) {
+           const parts = line.split(/:/);
+           let amtStr = parts.length > 1 ? parts[1] : line;
+           const num = parseFloat(amtStr.replace(/[^0-9.,]/g, "").replace(",", "."));
+           if (!isNaN(num) && num > 0) {
+             totalAmount = num;
+           } else if (i + 1 < lines.length) {
+             const nextNum = parseFloat(lines[i+1].replace(/[^0-9.,]/g, "").replace(",", "."));
+             if (!isNaN(nextNum) && nextNum > 0) {
+               totalAmount = nextNum;
+             }
+           }
+        }
+        
+        // ITEM PARSING HEURISTICS
+        if (lowerLine.includes("malın") || lowerLine.includes("xidmətin") || lowerLine.includes("adı")) {
+           inTable = true;
+           continue;
+        }
+        
+        if (inTable) {
+           if (lowerLine.includes("yekun") || lowerLine.includes("cəmi məbləğ") || lowerLine.includes("ədv")) {
+             inTable = false;
+           } else {
+             // Look for a line that has at least two decimal numbers (e.g. price and total)
+             const numMatches = line.match(/\b\d+[.,]\d{2}\b/g);
+             if (numMatches && numMatches.length >= 1) {
+               const nameMatch = line.match(/^[0-9.]*\s*([A-Za-zƏəŞşÇçÖöÜüİıĞğ\s-]+)/);
+               const name = nameMatch && nameMatch[1].trim().length > 2 ? nameMatch[1].trim() : "Məhsul/Xidmət";
+               
+               let total = 0;
+               let price = 0;
+               
+               if (numMatches.length >= 2) {
+                 total = parseFloat(numMatches[numMatches.length - 1].replace(',', '.'));
+                 price = parseFloat(numMatches[0].replace(',', '.'));
+               } else if (numMatches.length === 1) {
+                 total = parseFloat(numMatches[0].replace(',', '.'));
+                 price = total;
+               }
+               
+               let quantity = 1;
+               if (total > 0 && price > 0 && total !== price) {
+                 quantity = Math.round(total / price);
+               }
+               
+               // Avoid adding lines that are just sums
+               if (name.toLowerCase() !== "cəmi" && name.toLowerCase() !== "yekun") {
+                 possibleItems.push({ name, quantity, price, total });
+               }
+             }
+           }
         }
       }
       
+      if (possibleItems.length > 0) {
+         items = possibleItems;
+         // Recalculate total if we missed it
+         if (totalAmount === 0) {
+            totalAmount = items.reduce((acc, item) => acc + item.total, 0);
+         }
+      }
+      
       return {
-        customerName: customerName || "",
+        customerName: customerName || fileName.split('.')[0].replace(/[-_]/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase()), // Fallback to filename
         invoiceNumber: invoiceNumber || `QM-${Math.floor(100000 + Math.random() * 900000)}`,
         invoiceDate: invoiceDate || new Date().toISOString().split("T")[0],
         totalAmount: totalAmount || 0,
-        items: [{
-          name: "Qaimə üzrə məhsullar (PDF-dən avtomatik oxundu)",
+        items: items.length > 0 ? items : [{
+          name: "Qaimə üzrə ümumi məhsullar",
           quantity: 1,
           price: totalAmount || 0,
           total: totalAmount || 0
