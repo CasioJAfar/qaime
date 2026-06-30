@@ -5,6 +5,7 @@ import InvoicesView from "./components/InvoicesView";
 import CustomersView from "./components/CustomersView";
 import DebtsView from "./components/DebtsView";
 import ReportsView from "./components/ReportsView";
+import ProfitView from "./components/ProfitView";
 import SettingsView from "./components/SettingsView";
 import LoginView from "./components/LoginView";
 import AdminPanelView from "./components/AdminPanelView";
@@ -361,6 +362,14 @@ export default function App() {
                   onInvoiceUpdated={triggerRefresh}
                   showToast={showToast}
                   currency={currency}
+                />
+              )}
+
+              {activeTab === "profit" && (
+                <ProfitView 
+                  invoices={invoices} 
+                  currency={currency}
+                  showToast={showToast}
                 />
               )}
 

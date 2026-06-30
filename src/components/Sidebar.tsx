@@ -8,7 +8,8 @@ import {
   Settings,
   Shield,
   LogOut,
-  User
+  User,
+  TrendingUp
 } from "lucide-react";
 
 interface SidebarProps {
@@ -25,6 +26,7 @@ export default function Sidebar({ activeTab, setActiveTab, currentUser, onLogout
     { id: "customers", label: "Müştərilər", icon: Users },
     { id: "debts", label: "Borclar", icon: CreditCard },
     { id: "reports", label: "Hesabatlar", icon: FileSpreadsheet },
+    { id: "profit", label: "Xərc və Mənfəət", icon: TrendingUp },
     ...(currentUser?.role === "admin" ? [{ id: "admin_panel", label: "Admin Panel", icon: Shield }] : []),
     { id: "settings", label: "Ayarlar", icon: Settings },
   ];
