@@ -342,7 +342,7 @@ export default function ReportsView({ customers, invoices, loading, onInvoiceUpd
         {/* Printable Header Details */}
         <div className="flex flex-col sm:flex-row gap-4 justify-between sm:items-start border-b border-slate-150 pb-6">
           <div>
-            <h1 className="text-xl font-semibold text-slate-900 tracking-tight">QAİMƏ ERP REPORTING</h1>
+            <h1 className="text-xl font-semibold text-slate-900 tracking-tight">QAİMƏ</h1>
             <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wider font-bold">Ağıllı Maliyyə və Qaimə Uçotu</p>
             <p className="text-xs text-slate-500 mt-3 leading-relaxed">
               Azərbaycan Respublikası, Bakı şəhəri<br />
@@ -495,7 +495,7 @@ export default function ReportsView({ customers, invoices, loading, onInvoiceUpd
         </div>
 
         {/* Signatures Panel (Great for official PDF reports look!) */}
-        <div className="grid grid-cols-2 gap-8 pt-12 border-t border-slate-100">
+        <div className="grid grid-cols-2 gap-8 pt-12 border-t border-slate-100 print:hidden">
           <div className="space-y-4">
             <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest block">Hazırladı (Mühasibatlıq)</span>
             <div className="border-b border-slate-200 h-8 w-44"></div>

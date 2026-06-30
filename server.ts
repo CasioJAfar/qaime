@@ -652,18 +652,29 @@ async function parseInvoiceDeterministically(base64Data: string, fileName: strin
       const line = lines[i];
       const lowerLine = line.toLowerCase();
       
-      // Seriya, Nömrə, Tarix
+      // Nömrə və Tarix ayrı sətirlərdə ola bilər
+      const numMatch = line.match(/Nömrə:\s*([A-Za-z0-9-]+)/i) || line.match(/Qaimə №:\s*([A-Za-z0-9-]+)/i);
+      const dateMatch = line.match(/Tarix:\s*([\d.]+)/i) || line.match(/Tarixi:\s*([\d.]+)/i);
+      
+      if (numMatch) {
+         invoiceNumber = numMatch[1];
+      }
+      if (dateMatch) {
+         const parts = dateMatch[1].split(/[./-]/);
+         if (parts.length >= 3) {
+            // Convert DD.MM.YYYY to YYYY-MM-DD
+            if (parts[0].length === 2 && parts[2].length >= 4) {
+               invoiceDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+            } else {
+               invoiceDate = dateMatch[1];
+            }
+         }
+      }
+
+      // Seriya, Nömrə, Tarix eyni sətirdə olarsa
       if (lowerLine.includes("seriya:") && lowerLine.includes("nömrə:") && lowerLine.includes("tarix:")) {
-        const serMatch = line.match(/Seriya:\s*([\w]+)/i);
-        const numMatch = line.match(/Nömrə:\s*([\w]+)/i);
-        const dateMatch = line.match(/Tarix:\s*([\d.]+)/i);
+        const serMatch = line.match(/Seriya:\s*([A-Za-z0-9]+)/i);
         if (serMatch && numMatch) invoiceNumber = serMatch[1] + "-" + numMatch[1];
-        else if (numMatch) invoiceNumber = numMatch[1];
-        
-        if (dateMatch) {
-          const parts = dateMatch[1].split(/[./-]/);
-          if (parts.length >= 3) invoiceDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
-        }
       }
       
       // Göndərən
@@ -676,17 +687,29 @@ async function parseInvoiceDeterministically(base64Data: string, fileName: strin
       }
       
       // Qəbul edən
-      if (lowerLine.includes("qəbul edən:")) {
-        const match = line.match(/Qəbul edən:\s*VÖEN\s+([\d\s]+)\s+(.+)/i);
+      if (lowerLine.includes("qəbul edən:") || lowerLine.includes("alıcı:")) {
+        const match = line.match(/(?:Qəbul edən|Alıcı):\s*(?:VÖEN\s+)?([\d]{5,15})\s+(.+)/i);
         if (match) {
           extraData.receiverVOEN = match[1].replace(/\s+/g, '');
           customerName = match[2].trim().replace(/^"|"$/g, '');
         } else {
-           const parts = line.split(/qəbul edən:/i);
+           const parts = line.split(/(?:qəbul edən|alıcı):/i);
            if (parts.length > 1 && parts[1].trim() && !parts[1].trim().match(/^_/)) {
              customerName = parts[1].trim().replace(/_+$/, "").trim();
            } else if (i + 1 < lines.length) {
              customerName = lines[i+1].trim().replace(/_+$/, "").trim();
+           }
+        }
+        
+        // Şirkət adının əvvəlində rəqəm (VÖEN/KOD) varsa onları ayıraq
+        if (customerName) {
+           // 5-dən çox rəqəmdən ibarət sözlə başlayan sətirləri VÖEN kimi qəbul edək
+           const leadingNumbersMatch = customerName.match(/^(\d{5,})\s+(.+)$/);
+           if (leadingNumbersMatch) {
+              if (!extraData.receiverVOEN) {
+                 extraData.receiverVOEN = leadingNumbersMatch[1];
+              }
+              customerName = leadingNumbersMatch[2].trim().replace(/^"|"$/g, '');
            }
         }
       }

@@ -400,6 +400,20 @@ export default function InvoicesView({
     setUploadError(null);
     setUploadSuccessMsg(null);
 
+    // Duplicate Check
+    const isDuplicate = invoices.some(inv => 
+      inv.invoiceNumber === pendingInvoiceConfirm.invoiceNumber && 
+      inv.customerName.toLowerCase() === pendingInvoiceConfirm.customerName.toLowerCase()
+    );
+    
+    if (isDuplicate) {
+      const isConfirmed = window.confirm(`Bu qaimə nömrəsi (${pendingInvoiceConfirm.invoiceNumber}) artıq bu müştəri (${pendingInvoiceConfirm.customerName}) üçün mövcuddur. Təkrar qaimədir, yenə də əlavə edilsin?`);
+      if (!isConfirmed) {
+         setUploading(false);
+         return;
+      }
+    }
+
     try {
       const saveRes = await fetch("/api/invoices", {
         method: "POST",
@@ -490,13 +504,27 @@ export default function InvoicesView({
     }
 
     const totalAmount = manualItems.reduce((sum, item) => sum + item.total, 0);
+    const num = manualInvoiceNo || `QM-${Math.floor(100000 + Math.random() * 900000)}`;
+
+    // Duplicate Check
+    const isDuplicate = invoices.some(inv => 
+      inv.invoiceNumber === num && 
+      inv.customerName.toLowerCase() === manualCustomer.toLowerCase()
+    );
+    
+    if (isDuplicate) {
+      const isConfirmed = window.confirm(`Bu qaimə nömrəsi (${num}) artıq bu müştəri (${manualCustomer}) üçün mövcuddur. Təkrar qaimədir, yenə də əlavə edilsin?`);
+      if (!isConfirmed) {
+         return;
+      }
+    }
 
     try {
       const res = await fetch("/api/invoices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          invoiceNumber: manualInvoiceNo || `QM-${Math.floor(100000 + Math.random() * 900000)}`,
+          invoiceNumber: num,
           customerName: manualCustomer,
           customerCode: manualCustomerCode,
           invoiceDate: manualDate,
