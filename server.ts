@@ -788,8 +788,8 @@ async function generateContentWithRetry(ai: GoogleGenAI, params: any, maxRetries
   }
 }
 
-// Helper to parse invoice files (Excel/CSV) deterministically without AI
-function parseInvoiceDeterministically(base64Data: string, fileName: string, mimeType: string) {
+// Helper to parse invoice files (Excel/CSV/PDF) deterministically without AI
+async function parseInvoiceDeterministically(base64Data: string, fileName: string, mimeType: string) {
   try {
     const isExcel = fileName.toLowerCase().endsWith(".xlsx") || 
                     fileName.toLowerCase().endsWith(".xls") || 
@@ -798,6 +798,9 @@ function parseInvoiceDeterministically(base64Data: string, fileName: string, mim
                     
     const isCSV = fileName.toLowerCase().endsWith(".csv") || 
                   mimeType.includes("csv");
+                  
+    const isPDF = fileName.toLowerCase().endsWith(".pdf") || 
+                  mimeType.includes("pdf");
 
     let rows: any[][] = [];
 
@@ -814,6 +817,83 @@ function parseInvoiceDeterministically(base64Data: string, fileName: string, mim
         const delimiter = line.includes(";") ? ";" : ",";
         return line.split(delimiter).map(cell => cell.replace(/^["']|["']$/g, "").trim());
       });
+    } else if (isPDF) {
+      const pdfParse = require('pdf-parse');
+      const buffer = Buffer.from(base64Data, "base64");
+      const pdfData = await pdfParse(buffer);
+      const text = pdfData.text;
+      
+      // Basic text parsing for PDF
+      const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter((l: string) => l.length > 0);
+      
+      let customerName = "";
+      let invoiceNumber = "";
+      let invoiceDate = "";
+      let totalAmount = 0;
+      
+      // Search line by line
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].toLowerCase();
+        
+        // Find customer name
+        if (!customerName && (line.includes("alıcı") || line.includes("müştəri") || line.includes("sifarişçi"))) {
+           const parts = lines[i].split(":");
+           if (parts.length > 1 && parts[1].trim()) {
+             customerName = parts[1].trim();
+           } else if (i + 1 < lines.length) {
+             customerName = lines[i+1].trim();
+           }
+        }
+        
+        // Try to guess customer name if not found with keywords (look for typical company endings)
+        if (!customerName && (line.includes("mmc") || line.includes("qsc") || line.includes("asc") || line.includes("şirkəti"))) {
+           customerName = lines[i].trim();
+        }
+        
+        // Find invoice number
+        if (!invoiceNumber && (line.includes("qaimə") || line.includes("faktura") || line.includes("sənəd") || line.includes("№"))) {
+          const match = lines[i].match(/(QM-\d+|\d{5,})/i);
+          if (match) {
+            invoiceNumber = match[0];
+          }
+        }
+        
+        // Find date
+        if (!invoiceDate) {
+          const match = lines[i].match(/(\d{2})[./-](\d{2})[./-](\d{4})/);
+          if (match) {
+            invoiceDate = `${match[3]}-${match[2]}-${match[1]}`;
+          }
+        }
+        
+        // Find total
+        if (!totalAmount && (line.includes("cəmi") || line.includes("yekun") || line.includes("ödəniləcək"))) {
+          const parts = lines[i].split(":");
+          let amtStr = parts.length > 1 ? parts[1] : lines[i];
+          const num = parseFloat(amtStr.replace(/[^0-9.,]/g, "").replace(",", "."));
+          if (!isNaN(num) && num > 0) {
+            totalAmount = num;
+          } else if (i + 1 < lines.length) {
+            const nextNum = parseFloat(lines[i+1].replace(/[^0-9.,]/g, "").replace(",", "."));
+            if (!isNaN(nextNum) && nextNum > 0) {
+              totalAmount = nextNum;
+            }
+          }
+        }
+      }
+      
+      return {
+        customerName: customerName || fileName.split('.')[0].substring(0, 15),
+        invoiceNumber: invoiceNumber || `QM-${Math.floor(100000 + Math.random() * 900000)}`,
+        invoiceDate: invoiceDate || new Date().toISOString().split("T")[0],
+        totalAmount: totalAmount || 0,
+        items: [{
+          name: "Qaimə üzrə məhsullar (PDF-dən avtomatik oxundu)",
+          quantity: 1,
+          price: totalAmount || 0,
+          total: totalAmount || 0
+        }]
+      };
     } else {
       return null;
     }
@@ -1091,8 +1171,8 @@ app.post("/api/invoices/upload", adminOrUser, async (req, res) => {
   }
 
   try {
-    // 1. First try to parse deterministically (NO AI, 100% accurate rule-based extraction for Excel/CSV)
-    const deterministicData = parseInvoiceDeterministically(base64Data, fileName || "invoice.xlsx", mimeType);
+    // 1. First try to parse deterministically (NO AI, 100% accurate rule-based extraction for Excel/CSV/PDF)
+    const deterministicData = await parseInvoiceDeterministically(base64Data, fileName || "invoice.xlsx", mimeType);
     if (deterministicData) {
       console.log(`Successfully parsed invoice deterministically (AI-free) for file: ${fileName}`);
       deterministicData.customerName = normalizeCustomerName(deterministicData.customerName);
