@@ -296,6 +296,7 @@ export default function SettingsView({ onResetDB, currency, userInfo, onUpdateSe
                     onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (!file) return;
+                      e.target.value = ''; // Reset input so same file can be selected again
                       const reader = new FileReader();
                       reader.onload = async (event) => {
                         try {
@@ -327,10 +328,15 @@ export default function SettingsView({ onResetDB, currency, userInfo, onUpdateSe
                             if(showToast) showToast("Məlumatlar uğurla bərpa edildi! Səhifə yenilənir...", "success");
                             setTimeout(() => window.location.reload(), 1500);
                           } else {
-                            if(showToast) showToast("Bərpa zamanı xəta baş verdi.", "error");
+                            try {
+                              const errData = await res.json();
+                              if(showToast) showToast(`Bərpa xətası: ${errData.error || "Xəta baş verdi"}`, "error");
+                            } catch {
+                              if(showToast) showToast(`Xəta ${res.status}: ${res.statusText}`, "error");
+                            }
                           }
                         } catch (err) {
-                          if(showToast) showToast("Fayl oxunarkən və ya JSON formatında xəta baş verdi.", "error");
+                          if(showToast) showToast(`Fayl oxunarkən xəta: ${(err as Error).message}`, "error");
                         }
                       };
                       reader.readAsText(file);

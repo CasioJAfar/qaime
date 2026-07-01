@@ -1,3 +1,4 @@
+import { authenticateServer, readDBFromFirestore, writeDBToFirestore } from "./src/db";
 import express from "express";
 import path from "path";
 import fs from "fs";
@@ -93,51 +94,13 @@ const initialDB: DBState = {
 };
 
 // Helper to read database state
-function readDB(): DBState {
-  try {
-    if (fs.existsSync(DB_FILE)) {
-      const content = fs.readFileSync(DB_FILE, "utf-8");
-      const db = JSON.parse(content) as DBState;
-      
-      // Migrate existing db to support users if missing
-      if (!db.users || db.users.length === 0) {
-        db.users = [
-          { username: "admin", password: "195", role: "admin" },
-          { username: "user", password: "user", role: "user" },
-          { username: "cefer", password: "1", role: "user" }
-        ];
-        writeDB(db);
-      }
-      return db;
-    }
-  } catch (error) {
-    console.error("DB Oxunmasında xəta:", error);
-  }
-  // Initialize and write seed data
-  const seedDB: DBState = {
-    ...initialDB,
-    users: [
-      { username: "admin", password: "195", role: "admin" },
-      { username: "user", password: "user", role: "user" },
-      { username: "cefer", password: "1", role: "user" }
-    ] as User[]
-  };
-  writeDB(seedDB);
-  return seedDB;
-}
 
-// Helper to write database state
-function writeDB(state: DBState) {
-  try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(state, null, 2), "utf-8");
-  } catch (error) {
-    console.error("DB Yazılmasında xəta:", error);
-  }
-}
+
+
 
 // Helper to log user activities
-function addLog(action: string, details: string, req?: express.Request) {
-  const db = readDB();
+async function addLog(action: string, details: string, req?: express.Request) {
+  const db = await readDBFromFirestore();
   if (!db.logs) {
     db.logs = [];
   }
@@ -152,7 +115,7 @@ function addLog(action: string, details: string, req?: express.Request) {
   if (db.logs.length > 200) {
     db.logs = db.logs.slice(0, 200);
   }
-  writeDB(db);
+  await writeDBToFirestore(db);
 }
 
 // Role check middleware for mutating APIs
@@ -187,10 +150,10 @@ function normalizeCustomerName(name: string): string {
 // API Routes
 
 // Authentication API
-app.post("/api/login", (req, res) => {
+app.post("/api/login", async (req, res) => {
   const { username, password } = req.body;
   const normalizedUsername = (username || "").toLowerCase().trim();
-  const db = readDB();
+  const db = await readDBFromFirestore();
   const users = db.users || [];
   
   const matchedUser = users.find(u => u.username.toLowerCase().trim() === normalizedUsername && u.password === password);
@@ -203,20 +166,20 @@ app.post("/api/login", (req, res) => {
 });
 
 // Users list for admin
-app.get("/api/users", adminOnly, (req, res) => {
-  const db = readDB();
+app.get("/api/users", adminOnly, async (req, res) => {
+  const db = await readDBFromFirestore();
   const users = db.users || [];
   res.json(users.map(u => ({ username: u.username, role: u.role })));
 });
 
 // Update user role by admin
-app.post("/api/users/:username/role", adminOnly, (req, res) => {
+app.post("/api/users/:username/role", adminOnly, async (req, res) => {
   const { username } = req.params;
   const { role } = req.body;
   if (role !== "admin" && role !== "user" && role !== "moderator") {
     return res.status(400).json({ error: "Yanlış rol təyin edildi." });
   }
-  const db = readDB();
+  const db = await readDBFromFirestore();
   if (!db.users) db.users = [];
   
   const user = db.users.find(u => u.username.toLowerCase().trim() === username.toLowerCase().trim());
@@ -226,44 +189,59 @@ app.post("/api/users/:username/role", adminOnly, (req, res) => {
   
   const oldRole = user.role;
   user.role = role;
-  writeDB(db);
+  await writeDBToFirestore(db);
   
-  addLog("user_role_updated", `İstifadəçi "${user.username}" rolu dəyişdirildi: ${oldRole} -> ${role}`, req);
+  await addLog("user_role_updated", `İstifadəçi "${user.username}" rolu dəyişdirildi: ${oldRole} -> ${role}`, req);
   res.json({ success: true, username: user.username, role: user.role });
 });
 
 // Backup/Restore API
-app.get("/api/backup", adminOnly, (req, res) => {
-  const db = readDB();
+app.get("/api/backup", adminOnly, async (req, res) => {
+  const db = await readDBFromFirestore();
   res.setHeader("Content-Disposition", "attachment; filename=erp_backup.json");
   res.setHeader("Content-Type", "application/json");
   res.json(db);
-  addLog("backup_download", "Məlumatların ehtiyat nüsxəsi (JSON) yükləndi", req);
+  await addLog("backup_download", "Məlumatların ehtiyat nüsxəsi (JSON) yükləndi", req);
 });
 
-app.post("/api/restore", adminOnly, (req, res) => {
+app.post("/api/restore", adminOnly, async (req, res) => {
   try {
     const backupData = req.body;
-    if (!backupData || !Array.isArray(backupData.customers) || !Array.isArray(backupData.invoices)) {
-      return res.status(400).json({ error: "Yanlış ehtiyat nüsxə formatı." });
+    if (!backupData || typeof backupData !== "object") {
+      console.error("Yanlış ehtiyat nüsxə formatı (Obyekt deyil):", typeof backupData);
+      return res.status(400).json({ error: "Yanlış ehtiyat nüsxə formatı. JSON faylı düzgün deyil." });
     }
-    writeDB(backupData);
-    addLog("backup_restore", "Məlumatlar ehtiyat nüsxədən (JSON) bərpa edildi", req);
+    
+    // Auto-fix missing arrays to prevent crashes
+    if (!Array.isArray(backupData.customers)) backupData.customers = [];
+    if (!Array.isArray(backupData.invoices)) backupData.invoices = [];
+    if (!Array.isArray(backupData.payments)) backupData.payments = [];
+    if (!Array.isArray(backupData.cashRegister)) backupData.cashRegister = [];
+    if (!Array.isArray(backupData.logs)) backupData.logs = [];
+    if (!Array.isArray(backupData.users)) backupData.users = [
+      { username: "admin", password: "195", role: "admin" },
+      { username: "user", password: "user", role: "user" },
+      { username: "cefer", password: "1", role: "user" }
+    ];
+
+    await writeDBToFirestore(backupData);
+    await addLog("backup_restore", "Məlumatlar ehtiyat nüsxədən (JSON) bərpa edildi", req);
     res.json({ success: true, message: "Məlumatlar uğurla bərpa edildi." });
   } catch (error) {
-    res.status(500).json({ error: "Bərpa zamanı xəta baş verdi." });
+    console.error("Bərpa zamanı catch xətası:", error);
+    res.status(500).json({ error: "Bərpa zamanı xəta baş verdi: " + (error as Error).message });
   }
 });
 
 // Logs API
-app.get("/api/logs", adminOnly, (req, res) => {
-  const db = readDB();
+app.get("/api/logs", adminOnly, async (req, res) => {
+  const db = await readDBFromFirestore();
   res.json(db.logs || []);
 });
 
 // 1. Dashboard API
-app.get("/api/dashboard", (req, res) => {
-  const db = readDB();
+app.get("/api/dashboard", async (req, res) => {
+  const db = await readDBFromFirestore();
   
   // Calculate stats
   const totalInvoices = db.invoices.length;
@@ -337,20 +315,20 @@ app.get("/api/dashboard", (req, res) => {
 });
 
 // 2. Invoices API
-app.get("/api/invoices", (req, res) => {
-  const db = readDB();
+app.get("/api/invoices", async (req, res) => {
+  const db = await readDBFromFirestore();
   res.json(db.invoices);
 });
 
 // Add manual invoice
-app.post("/api/invoices", adminOrUser, (req, res) => {
+app.post("/api/invoices", adminOrUser, async (req, res) => {
   const { invoiceNumber, customerName, customerCode, invoiceDate, totalAmount, items, sourceFile, sourceFileType } = req.body;
   
   if (!customerName || !totalAmount) {
     return res.status(400).json({ error: "Müştəri adı və yekun məbləğ vacibdir." });
   }
 
-  const db = readDB();
+  const db = await readDBFromFirestore();
   
   // Format customer name nicely
   const formattedCustomerName = customerName.trim();
@@ -389,17 +367,17 @@ app.post("/api/invoices", adminOrUser, (req, res) => {
   };
 
   db.invoices.push(newInvoice);
-  writeDB(db);
+  await writeDBToFirestore(db);
 
-  addLog("invoice_created", `Əl ilə qaimə yaradıldı: ${num} - ${formattedCustomerName} (${totalAmount} AZN)`, req);
+  await addLog("invoice_created", `Əl ilə qaimə yaradıldı: ${num} - ${formattedCustomerName} (${totalAmount} AZN)`, req);
 
   res.status(201).json(newInvoice);
 });
 
 // 3. Delete Invoice
-app.delete("/api/invoices/:id", adminOnly, (req, res) => {
+app.delete("/api/invoices/:id", adminOnly, async (req, res) => {
   const { id } = req.params;
-  const db = readDB();
+  const db = await readDBFromFirestore();
   
   const index = db.invoices.findIndex(inv => inv.id === id);
   if (index === -1) {
@@ -407,16 +385,16 @@ app.delete("/api/invoices/:id", adminOnly, (req, res) => {
   }
 
   const deleted = db.invoices.splice(index, 1)[0];
-  writeDB(db);
+  await writeDBToFirestore(db);
 
-  addLog("invoice_deleted", `Qaimə silindi: ${deleted.invoiceNumber} - ${deleted.customerName} (${deleted.totalAmount} AZN)`, req);
+  await addLog("invoice_deleted", `Qaimə silindi: ${deleted.invoiceNumber} - ${deleted.customerName} (${deleted.totalAmount} AZN)`, req);
 
   res.json({ success: true, deleted });
 });
 
 // 4. Customers API
-app.get("/api/customers", (req, res) => {
-  const db = readDB();
+app.get("/api/customers", async (req, res) => {
+  const db = await readDBFromFirestore();
   
   // Aggregate billing details per customer
   const aggregateMap = new Map<string, { totalAmount: number; paidAmount: number; invoices: Invoice[]; payments: Payment[] }>();
@@ -470,13 +448,13 @@ app.get("/api/customers", (req, res) => {
 });
 
 // Add manual customer
-app.post("/api/customers", adminOrUser, (req, res) => {
+app.post("/api/customers", adminOrUser, async (req, res) => {
   const { name, code } = req.body;
   if (!name) {
     return res.status(400).json({ error: "Müştəri adı vacibdir." });
   }
 
-  const db = readDB();
+  const db = await readDBFromFirestore();
   const formattedName = name.trim();
   
   const customerExists = db.customers.some(
@@ -495,17 +473,17 @@ app.post("/api/customers", adminOrUser, (req, res) => {
   };
 
   db.customers.push(newCustomer);
-  writeDB(db);
+  await writeDBToFirestore(db);
 
-  addLog("customer_created", `Yeni müştəri əlavə edildi: ${formattedName}`, req);
+  await addLog("customer_created", `Yeni müştəri əlavə edildi: ${formattedName}`, req);
 
   res.status(201).json(newCustomer);
 });
 
 // Delete customer API
-app.delete("/api/customers/:id", adminOnly, (req, res) => {
+app.delete("/api/customers/:id", adminOnly, async (req, res) => {
   const { id } = req.params;
-  const db = readDB();
+  const db = await readDBFromFirestore();
   const index = db.customers.findIndex(c => c.id === id);
   if (index === -1) {
     return res.status(404).json({ error: "Müştəri tapılmadı." });
@@ -521,15 +499,15 @@ app.delete("/api/customers/:id", adminOnly, (req, res) => {
     p => p.customerId !== id && p.customerName.toLowerCase().trim() !== deletedCustomer.name.toLowerCase().trim()
   );
 
-  writeDB(db);
+  await writeDBToFirestore(db);
 
-  addLog("customer_deleted", `Müştəri silindi: ${deletedCustomer.name}`, req);
+  await addLog("customer_deleted", `Müştəri silindi: ${deletedCustomer.name}`, req);
 
   res.json({ success: true, deletedCustomer });
 });
 
 // 5. Customer Payment (Ödəniş qəbulu)
-app.post("/api/customers/:id/payment", adminOrUser, (req, res) => {
+app.post("/api/customers/:id/payment", adminOrUser, async (req, res) => {
   const { id } = req.params;
   const { amount, paymentDate, note, invoiceId } = req.body;
 
@@ -537,7 +515,7 @@ app.post("/api/customers/:id/payment", adminOrUser, (req, res) => {
     return res.status(400).json({ error: "Düzgün ödəniş məbləği daxil edin." });
   }
 
-  const db = readDB();
+  const db = await readDBFromFirestore();
   const customer = db.customers.find(c => c.id === id);
   if (!customer) {
     return res.status(404).json({ error: "Müştəri tapılmadı." });
@@ -565,17 +543,17 @@ app.post("/api/customers/:id/payment", adminOrUser, (req, res) => {
   };
 
   db.payments.push(newPayment);
-  writeDB(db);
+  await writeDBToFirestore(db);
 
-  addLog("payment_recorded", `Ödəniş qeyd edildi: ${customer.name} - ${amount} AZN (${newPayment.note})`, req);
+  await addLog("payment_recorded", `Ödəniş qeyd edildi: ${customer.name} - ${amount} AZN (${newPayment.note})`, req);
 
   res.status(201).json(newPayment);
 });
 
 // Delete/Undo Payment (Ödənişin silinməsi / geri alınması)
-app.delete("/api/payments/:id", adminOnly, (req, res) => {
+app.delete("/api/payments/:id", adminOnly, async (req, res) => {
   const { id } = req.params;
-  const db = readDB();
+  const db = await readDBFromFirestore();
 
   const paymentIndex = db.payments.findIndex(p => p.id === id);
   if (paymentIndex === -1) {
@@ -594,17 +572,17 @@ app.delete("/api/payments/:id", adminOnly, (req, res) => {
 
   // Remove the payment
   db.payments.splice(paymentIndex, 1);
-  writeDB(db);
+  await writeDBToFirestore(db);
 
-  addLog("payment_deleted", `Ödəniş ləğv edildi: ${payment.customerName} - ${payment.amount} AZN`, req);
+  await addLog("payment_deleted", `Ödəniş ləğv edildi: ${payment.customerName} - ${payment.amount} AZN`, req);
 
   res.json({ success: true, deletedPaymentId: id });
 });
 
 // 6. Reset Database API
-app.get("/api/reset", adminOnly, (req, res) => {
-  writeDB(initialDB);
-  addLog("database_reset", "Bütün verilənlər bazası sıfırlandı və ilkin vəziyyətinə gətirildi", req);
+app.get("/api/reset", adminOnly, async (req, res) => {
+  await writeDBToFirestore(initialDB);
+  await addLog("database_reset", "Bütün verilənlər bazası sıfırlandı və ilkin vəziyyətinə gətirildi", req);
   res.json({ success: true, message: "Məlumatlar sıfırlandı." });
 });
 
@@ -890,6 +868,8 @@ app.post("/api/invoices/upload", adminOrUser, async (req, res) => {
 
 // Vite integration
 async function startServer() {
+  await authenticateServer();
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -899,11 +879,12 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-    app.get("*", (req, res) => {
+    app.get("*", async (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
 
+  // Remove json parsing limit if any
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`[Qaimə ERP] Server running on http://localhost:${PORT}`);
   });
