@@ -78,19 +78,29 @@ interface User {
   role: "admin" | "moderator" | "user";
 }
 
+interface Contact {
+  id: string;
+  name: string;
+  phone: string;
+  address: string;
+  createdAt: string;
+}
+
 interface DBState {
   invoices: Invoice[];
   customers: Customer[];
   payments: Payment[];
   logs?: LogEntry[];
   users?: User[];
+  contacts?: Contact[];
 }
 
 // Initial Sample Data in Azerbaijani
 const initialDB: DBState = {
   customers: [],
   invoices: [],
-  payments: []
+  payments: [],
+  contacts: []
 };
 
 // Helper to read database state
@@ -392,6 +402,39 @@ app.delete("/api/invoices/:id", adminOnly, async (req, res) => {
   res.json({ success: true, deleted });
 });
 
+// Update Invoice
+app.put("/api/invoices/:id", adminOrUser, async (req, res) => {
+  const { id } = req.params;
+  const { invoiceNumber, customerName, customerCode, invoiceDate, totalAmount, items, sourceFile, sourceFileType } = req.body;
+  
+  if (!customerName || totalAmount === undefined) {
+    return res.status(400).json({ error: "Müştəri adı və yekun məbləğ vacibdir." });
+  }
+
+  const db = await readDBFromFirestore();
+  const invoice = db.invoices.find(inv => inv.id === id);
+  
+  if (!invoice) {
+    return res.status(404).json({ error: "Qaimə tapılmadı." });
+  }
+
+  const oldTotal = invoice.totalAmount;
+  
+  invoice.invoiceNumber = invoiceNumber || invoice.invoiceNumber;
+  invoice.customerName = customerName.trim();
+  if (customerCode !== undefined) invoice.customerCode = customerCode;
+  if (invoiceDate) invoice.invoiceDate = invoiceDate;
+  invoice.totalAmount = Number(totalAmount);
+  if (items) invoice.items = items;
+  if (sourceFile !== undefined) invoice.sourceFile = sourceFile;
+  if (sourceFileType !== undefined) invoice.sourceFileType = sourceFileType;
+
+  await writeDBToFirestore(db);
+  await addLog("invoice_updated", `Qaimə yeniləndi: ${invoice.invoiceNumber} - ${invoice.customerName} (Əvvəlki məbləğ: ${oldTotal} AZN -> Yeni: ${invoice.totalAmount} AZN)`, req);
+
+  res.json({ success: true, invoice });
+});
+
 // 4. Customers API
 app.get("/api/customers", async (req, res) => {
   const db = await readDBFromFirestore();
@@ -478,6 +521,57 @@ app.post("/api/customers", adminOrUser, async (req, res) => {
   await addLog("customer_created", `Yeni müştəri əlavə edildi: ${formattedName}`, req);
 
   res.status(201).json(newCustomer);
+});
+
+// Update customer API
+app.put("/api/customers/:id", adminOrUser, async (req, res) => {
+  const { id } = req.params;
+  const { name, code } = req.body;
+  if (!name) {
+    return res.status(400).json({ error: "Müştəri adı vacibdir." });
+  }
+
+  const db = await readDBFromFirestore();
+  const formattedName = name.trim();
+  
+  const customer = db.customers.find(c => c.id === id);
+  if (!customer) {
+    return res.status(404).json({ error: "Müştəri tapılmadı." });
+  }
+
+  const nameChanged = customer.name !== formattedName;
+  const oldName = customer.name;
+
+  if (nameChanged) {
+    const customerExists = db.customers.some(
+      c => c.id !== id && c.name.toLowerCase().trim() === formattedName.toLowerCase().trim()
+    );
+    if (customerExists) {
+      return res.status(400).json({ error: "Bu adda başqa müştəri artıq mövcuddur." });
+    }
+  }
+
+  customer.name = formattedName;
+  if (code !== undefined) customer.code = code;
+
+  // Also update related invoices and payments if name changed
+  if (nameChanged) {
+    db.invoices.forEach(inv => {
+      if (inv.customerName.toLowerCase().trim() === oldName.toLowerCase().trim()) {
+        inv.customerName = formattedName;
+      }
+    });
+    db.payments.forEach(pay => {
+      if (pay.customerId === id || pay.customerName.toLowerCase().trim() === oldName.toLowerCase().trim()) {
+        pay.customerName = formattedName;
+      }
+    });
+  }
+
+  await writeDBToFirestore(db);
+  await addLog("customer_updated", `Müştəri yeniləndi: ${oldName} -> ${formattedName}`, req);
+
+  res.json({ success: true, customer });
 });
 
 // Delete customer API
@@ -865,6 +959,66 @@ app.post("/api/invoices/upload", adminOrUser, async (req, res) => {
   }
 });
 
+
+// 8. Contacts API
+app.get("/api/contacts", async (req, res) => {
+  const db = await readDBFromFirestore();
+  res.json(db.contacts || []);
+});
+
+app.post("/api/contacts", adminOrUser, async (req, res) => {
+  const { name, phone, address } = req.body;
+  if (!name) return res.status(400).json({ error: "Müştəri adı vacibdir." });
+  
+  const db = await readDBFromFirestore();
+  if (!db.contacts) db.contacts = [];
+  
+  const newContact: Contact = {
+    id: "contact-" + Date.now(),
+    name: name.trim(),
+    phone: phone ? phone.trim() : "",
+    address: address ? address.trim() : "",
+    createdAt: new Date().toISOString()
+  };
+  
+  db.contacts.push(newContact);
+  await writeDBToFirestore(db);
+  await addLog("contact_added", `Şəxsi müştəri əlavə edildi: ${newContact.name}`, req);
+  res.status(201).json(newContact);
+});
+
+app.put("/api/contacts/:id", adminOrUser, async (req, res) => {
+  const { id } = req.params;
+  const { name, phone, address } = req.body;
+  
+  const db = await readDBFromFirestore();
+  if (!db.contacts) db.contacts = [];
+  
+  const contact = db.contacts.find(c => c.id === id);
+  if (!contact) return res.status(404).json({ error: "Müştəri tapılmadı." });
+  
+  if (name) contact.name = name.trim();
+  if (phone !== undefined) contact.phone = phone.trim();
+  if (address !== undefined) contact.address = address.trim();
+  
+  await writeDBToFirestore(db);
+  await addLog("contact_updated", `Şəxsi müştəri məlumatları yeniləndi: ${contact.name}`, req);
+  res.json({ success: true, contact });
+});
+
+app.delete("/api/contacts/:id", adminOnly, async (req, res) => {
+  const { id } = req.params;
+  const db = await readDBFromFirestore();
+  if (!db.contacts) db.contacts = [];
+  
+  const index = db.contacts.findIndex(c => c.id === id);
+  if (index === -1) return res.status(404).json({ error: "Müştəri tapılmadı." });
+  
+  const deleted = db.contacts.splice(index, 1)[0];
+  await writeDBToFirestore(db);
+  await addLog("contact_deleted", `Şəxsi müştəri silindi: ${deleted.name}`, req);
+  res.json({ success: true, deleted });
+});
 
 // Vite integration
 async function startServer() {

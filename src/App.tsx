@@ -6,10 +6,11 @@ import CustomersView from "./components/CustomersView";
 import DebtsView from "./components/DebtsView";
 import ReportsView from "./components/ReportsView";
 import ProfitView from "./components/ProfitView";
+import ContactsView from "./components/ContactsView";
 import SettingsView from "./components/SettingsView";
 import LoginView from "./components/LoginView";
 import AdminPanelView from "./components/AdminPanelView";
-import { DashboardData, Invoice, Customer } from "./types";
+import { DashboardData, Invoice, Customer, Contact } from "./types";
 import { AlertCircle, RefreshCw, CheckCircle, XCircle, Info } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -34,6 +35,7 @@ export default function App() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   
   // Selection states across views
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
@@ -155,23 +157,26 @@ export default function App() {
       setLoading(true);
       setError(null);
       try {
-        const [dashRes, invRes, custRes] = await Promise.all([
+        const [dashRes, invRes, custRes, contactsRes] = await Promise.all([
           fetch("/api/dashboard"),
           fetch("/api/invoices"),
-          fetch("/api/customers")
+          fetch("/api/customers"),
+          fetch("/api/contacts")
         ]);
 
-        if (!dashRes.ok || !invRes.ok || !custRes.ok) {
+        if (!dashRes.ok || !invRes.ok || !custRes.ok || !contactsRes.ok) {
           throw new Error("Sistem verilənlərinin oxunmasında xəta baş verdi.");
         }
 
         const dashData = await dashRes.json();
         const invData = await invRes.json();
         const custData = await custRes.json();
+        const contactsData = await contactsRes.json();
 
         setDashboardData(dashData);
         setInvoices(invData);
         setCustomers(custData);
+        setContacts(contactsData);
 
         // Keep selected customer synchronized with refreshed data
         if (selectedCustomer) {
@@ -208,6 +213,49 @@ export default function App() {
       triggerRefresh();
     } else {
       throw new Error("Verilənlər bazası sıfırlanmadı.");
+    }
+  };
+
+  const handleAddContact = async (contact: Partial<Contact>) => {
+    try {
+      const res = await fetch("/api/contacts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(contact)
+      });
+      if (!res.ok) throw new Error("Məlumat əlavə edilmədi.");
+      triggerRefresh();
+      showToast("Şəxsi müştəri əlavə edildi.", "success");
+    } catch (e: any) {
+      showToast(e.message, "error");
+    }
+  };
+
+  const handleEditContact = async (id: string, contact: Partial<Contact>) => {
+    try {
+      const res = await fetch(`/api/contacts/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(contact)
+      });
+      if (!res.ok) throw new Error("Məlumat yenilənmədi.");
+      triggerRefresh();
+      showToast("Şəxsi müştəri yeniləndi.", "success");
+    } catch (e: any) {
+      showToast(e.message, "error");
+    }
+  };
+
+  const handleDeleteContact = async (id: string) => {
+    try {
+      const res = await fetch(`/api/contacts/${id}`, {
+        method: "DELETE"
+      });
+      if (!res.ok) throw new Error("Məlumat silinmədi.");
+      triggerRefresh();
+      showToast("Şəxsi müştəri silindi.", "success");
+    } catch (e: any) {
+      showToast(e.message, "error");
     }
   };
 
@@ -370,6 +418,16 @@ export default function App() {
                   invoices={invoices} 
                   currency={currency}
                   showToast={showToast}
+                />
+              )}
+
+              {activeTab === "contacts" && currentUser.role !== "user" && (
+                <ContactsView 
+                  contacts={contacts}
+                  onAddContact={handleAddContact}
+                  onEditContact={handleEditContact}
+                  onDeleteContact={handleDeleteContact}
+                  currentUser={currentUser}
                 />
               )}
 

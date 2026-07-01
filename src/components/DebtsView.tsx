@@ -24,7 +24,7 @@ interface DebtsViewProps {
 }
 
 export default function DebtsView({ customers, loading, onPaymentRecorded, currency = "AZN" }: DebtsViewProps) {
-  const savedUser = localStorage.getItem("user");
+  const savedUser = localStorage.getItem("erp_user");
   const isAdmin = savedUser ? JSON.parse(savedUser).role === "admin" : false;
 
   const [search, setSearch] = useState("");

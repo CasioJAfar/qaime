@@ -44,6 +44,14 @@ export interface Payment {
   invoiceNumber?: string;
 }
 
+export interface Contact {
+  id: string;
+  name: string;
+  phone: string;
+  address: string;
+  createdAt: string;
+}
+
 export interface DashboardData {
   totalInvoices: number;
   totalSales: number;
