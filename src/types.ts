@@ -30,6 +30,9 @@ export interface Customer {
   debtAmount: number;
   invoices: Invoice[];
   payments: Payment[];
+  lat?: number;
+  lng?: number;
+  address?: string;
 }
 
 export interface Payment {

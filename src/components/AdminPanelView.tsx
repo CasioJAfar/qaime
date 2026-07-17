@@ -68,7 +68,7 @@ export default function AdminPanelView({ currentUser, onResetDB, showToast }: Ad
     }
   };
 
-  const handleRoleChange = async (username: string, newRole: "admin" | "moderator" | "user") => {
+  const handleRoleChange = async (username: string, newRole: "admin" | "moderator" | "user" | "2") => {
     if (username.toLowerCase() === "admin") {
       showToast("Əsas 'admin' istifadəçisinin rolu dəyişdirilə bilməz!", "error");
       return;
@@ -87,7 +87,7 @@ export default function AdminPanelView({ currentUser, onResetDB, showToast }: Ad
         body: JSON.stringify({ role: newRole })
       });
       if (res.ok) {
-        showToast(`"${username}" istifadəçisinin rolu "${newRole === "admin" ? "Admin" : newRole === "moderator" ? "Moderator" : "User"}" olaraq yeniləndi.`, "success");
+        showToast(`"${username}" istifadəçisinin rolu "${newRole === "admin" ? "Admin" : newRole === "moderator" ? "Moderator" : newRole === "2" ? "Rol 2" : "User"}" olaraq yeniləndi.`, "success");
         await fetchUsers();
         await fetchLogs();
       } else {
@@ -271,6 +271,7 @@ export default function AdminPanelView({ currentUser, onResetDB, showToast }: Ad
                           <span className={`inline-block text-[9px] font-black uppercase tracking-wider px-1 py-0.5 rounded ${
                             u.role === "admin" ? "bg-indigo-50 text-indigo-600" : 
                             u.role === "moderator" ? "bg-emerald-50 text-emerald-600" : 
+                            u.role === "2" ? "bg-amber-50 text-amber-600" :
                             "bg-slate-100 text-slate-500"
                           }`}>
                             {u.role}
@@ -312,6 +313,17 @@ export default function AdminPanelView({ currentUser, onResetDB, showToast }: Ad
                         } disabled:opacity-50 disabled:cursor-not-allowed`}
                       >
                         User
+                      </button>
+                      <button
+                        disabled={isMainAdmin || updatingUser === u.username}
+                        onClick={() => handleRoleChange(u.username, "2")}
+                        className={`flex-1 text-[9px] font-black uppercase py-1 rounded transition border text-center cursor-pointer ${
+                          u.role === "2"
+                            ? "bg-amber-600 border-amber-600 text-white font-black shadow-xs"
+                            : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      >
+                        Rol 2
                       </button>
                     </div>
                   </div>

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   Settings, 
   RotateCcw, 
@@ -11,7 +11,11 @@ import {
   User,
   Building,
   Globe,
-  Save
+  Save,
+  Moon,
+  Sun,
+  CalendarClock,
+  Mail
 } from "lucide-react";
 
 interface SettingsViewProps {
@@ -38,6 +42,11 @@ export default function SettingsView({ onResetDB, currency, userInfo, onUpdateSe
   const [phone, setPhone] = useState(userInfo?.phone || "");
   const [selectedCurrency, setSelectedCurrency] = useState(currency || "AZN");
 
+  const [theme, setTheme] = useState(localStorage.getItem("erp_theme") || "light");
+
+  const [scheduledFrequency, setScheduledFrequency] = useState(localStorage.getItem("erp_scheduled_freq") || "weekly");
+  const [scheduledEmail, setScheduledEmail] = useState(localStorage.getItem("erp_scheduled_email") || "");
+
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
     onUpdateSettings(selectedCurrency, { companyName, ownerName, email, phone });
@@ -46,7 +55,106 @@ export default function SettingsView({ onResetDB, currency, userInfo, onUpdateSe
     }
   };
 
+  const toggleTheme = () => {
+    const newTheme = theme === "light" ? "dark" : "light";
+    setTheme(newTheme);
+    localStorage.setItem("erp_theme", newTheme);
+    if (newTheme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  };
+
+  const saveScheduledReports = () => {
+    localStorage.setItem("erp_scheduled_freq", scheduledFrequency);
+    localStorage.setItem("erp_scheduled_email", scheduledEmail);
+    if (showToast) showToast("Hesabat planı uğurla yadda saxlanıldı!", "success");
+  };
+
   const [confirmReset, setConfirmReset] = useState(false);
+
+  // Sessions and Password states
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordChangeLoading, setPasswordChangeLoading] = useState(false);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+
+  useEffect(() => {
+    fetchSessions();
+  }, []);
+
+  const fetchSessions = async () => {
+    try {
+      setSessionsLoading(true);
+      const savedUser = localStorage.getItem("erp_user");
+      if (!savedUser) return;
+      const user = JSON.parse(savedUser);
+      
+      const res = await fetch("/api/sessions", {
+        headers: { "x-user-username": user.username }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSessions(data);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSessionsLoading(false);
+    }
+  };
+
+  const handleLogoutSession = async (sessionId: string) => {
+    try {
+      const savedUser = localStorage.getItem("erp_user");
+      if (!savedUser) return;
+      const user = JSON.parse(savedUser);
+      
+      const res = await fetch(`/api/sessions/${sessionId}`, {
+        method: "DELETE",
+        headers: { "x-user-username": user.username }
+      });
+      if (res.ok) {
+        setSessions(sessions.filter(s => s.id !== sessionId));
+        if (showToast) showToast("Seans uğurla sonlandırıldı.", "success");
+      }
+    } catch (e) {
+      console.error(e);
+      if (showToast) showToast("Seansı sonlandırmaq mümkün olmadı.", "error");
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setPasswordChangeLoading(true);
+      const savedUser = localStorage.getItem("erp_user");
+      if (!savedUser) return;
+      const user = JSON.parse(savedUser);
+      
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-username": user.username
+        },
+        body: JSON.stringify({ currentPassword, newPassword })
+      });
+      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      
+      setCurrentPassword("");
+      setNewPassword("");
+      if (showToast) showToast("Şifrə uğurla dəyişdirildi!", "success");
+    } catch (e: any) {
+      if (showToast) showToast(e.message || "Xəta baş verdi.", "error");
+    } finally {
+      setPasswordChangeLoading(false);
+    }
+  };
 
   const handleReset = async () => {
     setLoading(true);
@@ -76,10 +184,25 @@ export default function SettingsView({ onResetDB, currency, userInfo, onUpdateSe
           
           {/* User Profile & Currency Settings */}
           <div className="space-y-4 pb-6 border-b border-slate-100">
-            <h3 className="text-sm font-semibold text-slate-800 flex items-center space-x-2">
-              <User className="w-4 h-4 text-indigo-600" />
-              <span>İstifadəçi Profili və Valyuta Tənzimləmələri</span>
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-800 flex items-center space-x-2">
+                <User className="w-4 h-4 text-indigo-600" />
+                <span>İstifadəçi Profili və Valyuta Tənzimləmələri</span>
+              </h3>
+              
+              {/* Dark Mode Toggle */}
+              <button 
+                onClick={toggleTheme}
+                className="flex items-center space-x-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-full text-xs font-semibold transition no-invert"
+              >
+                {theme === "light" ? (
+                  <><Moon className="w-3.5 h-3.5" /> <span>Qaranlıq Rejim</span></>
+                ) : (
+                  <><Sun className="w-3.5 h-3.5" /> <span>İşıqlı Rejim</span></>
+                )}
+              </button>
+            </div>
+            
             <p className="text-xs text-slate-500 leading-relaxed">
               Sistemdə görünəcək şirkət, rəhbər və əlaqə məlumatlarını, habelə qaimələrin, hesabatların və borcların hesablanacağı əsas valyutanı tənzimləyin.
             </p>
@@ -168,6 +291,143 @@ export default function SettingsView({ onResetDB, currency, userInfo, onUpdateSe
                 </div>
               </div>
             </form>
+          </div>
+
+          {/* Scheduled Reports Section */}
+          <div className="space-y-4 pb-6 border-b border-slate-100">
+            <h3 className="text-sm font-semibold text-slate-800 flex items-center space-x-2">
+              <CalendarClock className="w-4 h-4 text-indigo-600" />
+              <span>Avtomatik Hesabatlar (Scheduled Reports)</span>
+            </h3>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Qaimə və borc statusları haqqında hesabatların periyodik olaraq e-poçt ünvanınıza göndərilməsini planlayın.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Göndərilmə Tezliyi</label>
+                <div className="relative">
+                  <CalendarClock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
+                  <select 
+                    value={scheduledFrequency}
+                    onChange={(e) => setScheduledFrequency(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-indigo-500 font-bold"
+                  >
+                    <option value="daily">Gündəlik (Hər gün sonu)</option>
+                    <option value="weekly">Həftəlik (Hər bazar ertəsi)</option>
+                    <option value="monthly">Aylıq (Hər ayın 1-i)</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">E-poçt Ünvanı</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
+                  <input 
+                    type="email" 
+                    value={scheduledEmail}
+                    onChange={(e) => setScheduledEmail(e.target.value)}
+                    placeholder="hesabat@sirketiniz.com"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-indigo-500 font-semibold"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button 
+                onClick={saveScheduledReports}
+                className="px-4 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5"
+              >
+                <CheckCircle className="w-4 h-4" />
+                <span>Planı Yadda Saxla</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Change Password Section */}
+          <div className="space-y-4 pb-6 border-b border-slate-100">
+            <h3 className="text-sm font-semibold text-slate-800 flex items-center space-x-2">
+              <Key className="w-4 h-4 text-indigo-600" />
+              <span>Şifrəni Dəyişdir</span>
+            </h3>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Hesabınızın təhlükəsizliyini qorumaq üçün şifrənizi mütəmadi olaraq yeniləyin.
+            </p>
+            <form onSubmit={handleChangePassword} className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Cari Şifrə</label>
+                  <input 
+                    type="password" 
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    required
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Yeni Şifrə</label>
+                  <input 
+                    type="password" 
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    required
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <button 
+                  type="submit"
+                  disabled={passwordChangeLoading}
+                  className="px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 disabled:opacity-50 shadow-md"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Şifrəni Yenilə</span>
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Active Sessions Section */}
+          <div className="space-y-4 pb-6 border-b border-slate-100">
+            <h3 className="text-sm font-semibold text-slate-800 flex items-center space-x-2">
+              <Globe className="w-4 h-4 text-indigo-600" />
+              <span>Aktiv Seanslar (Giriş Edilən Cihazlar)</span>
+            </h3>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Hesabınıza hansı cihazlardan və IP ünvanlarından daxil olunduğuna nəzarət edin və ehtiyac olduqda onları sonlandırın.
+            </p>
+            <div className="space-y-3">
+              {sessionsLoading ? (
+                <div className="text-center py-4">
+                  <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin inline-block"></div>
+                </div>
+              ) : sessions.length === 0 ? (
+                <div className="text-xs text-slate-500 text-center py-2 bg-slate-50 rounded-lg border border-slate-100">
+                  Aktiv seans tapılmadı. Zəhmət olmasa yenidən daxil olun.
+                </div>
+              ) : (
+                sessions.map(s => (
+                  <div key={s.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-white border border-slate-200 p-3 rounded-lg shadow-xs">
+                    <div>
+                      <div className="text-xs font-bold text-slate-800">{s.device}</div>
+                      <div className="text-[10px] text-slate-500 mt-0.5 space-x-2">
+                        <span>IP: <span className="font-mono">{s.ip}</span></span>
+                        <span>•</span>
+                        <span>Son aktivlik: {new Date(s.lastActive).toLocaleString('az-AZ')}</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleLogoutSession(s.id)}
+                      className="mt-2 sm:mt-0 text-[10px] px-3 py-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 font-bold uppercase rounded-md border border-rose-100 transition"
+                    >
+                      Çıxış Et
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
 
           {/* Database Admin Section */}

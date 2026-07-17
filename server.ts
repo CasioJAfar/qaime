@@ -75,7 +75,7 @@ interface LogEntry {
 interface User {
   username: string;
   password?: string;
-  role: "admin" | "moderator" | "user";
+  role: "admin" | "moderator" | "user" | "2";
 }
 
 interface Contact {
@@ -86,6 +86,15 @@ interface Contact {
   createdAt: string;
 }
 
+interface Session {
+  id: string;
+  username: string;
+  device: string;
+  ip: string;
+  lastActive: string;
+  createdAt: string;
+}
+
 interface DBState {
   invoices: Invoice[];
   customers: Customer[];
@@ -93,6 +102,7 @@ interface DBState {
   logs?: LogEntry[];
   users?: User[];
   contacts?: Contact[];
+  sessions?: Session[];
 }
 
 // Initial Sample Data in Azerbaijani
@@ -140,7 +150,7 @@ const adminOnly = (req: express.Request, res: express.Response, next: express.Ne
 // Role check middleware allowing both Admin, Moderator, and User roles
 const adminOrUser = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const role = req.headers["x-user-role"] || req.query.role;
-  if (role !== "admin" && role !== "user" && role !== "moderator") {
+  if (role !== "admin" && role !== "user" && role !== "moderator" && role !== "2") {
     return res.status(403).json({ error: "Bu əməliyyat üçün giriş tələb olunur." });
   }
   next();
@@ -161,7 +171,7 @@ function normalizeCustomerName(name: string): string {
 
 // Authentication API
 app.post("/api/login", async (req, res) => {
-  const { username, password } = req.body;
+  const { username, password, deviceInfo } = req.body;
   const normalizedUsername = (username || "").toLowerCase().trim();
   const db = await readDBFromFirestore();
   const users = db.users || [];
@@ -169,10 +179,59 @@ app.post("/api/login", async (req, res) => {
   const matchedUser = users.find(u => u.username.toLowerCase().trim() === normalizedUsername && u.password === password);
   
   if (matchedUser) {
-    res.json({ success: true, role: matchedUser.role, username: matchedUser.username });
+    if (!db.sessions) db.sessions = [];
+    const sessionId = "sess-" + Date.now() + "-" + Math.random().toString(36).substr(2, 9);
+    const device = deviceInfo || req.headers["user-agent"] || "Bilinməyən cihaz";
+    const ip = Array.isArray(req.headers['x-forwarded-for']) ? req.headers['x-forwarded-for'][0] : req.headers['x-forwarded-for'] || req.socket?.remoteAddress || "Bilinməyən IP";
+    
+    db.sessions.push({
+      id: sessionId,
+      username: matchedUser.username,
+      device: device,
+      ip: ip,
+      lastActive: new Date().toISOString(),
+      createdAt: new Date().toISOString()
+    });
+    await writeDBToFirestore(db);
+    
+    res.json({ success: true, role: matchedUser.role, username: matchedUser.username, sessionId });
   } else {
     res.status(401).json({ error: "İstifadəçi adı və ya şifrə yanlışdır." });
   }
+});
+
+// Get user active sessions
+app.get("/api/sessions", adminOrUser, async (req, res) => {
+  const username = req.headers["x-user-username"] as string;
+  const db = await readDBFromFirestore();
+  const userSessions = (db.sessions || []).filter(s => s.username === username);
+  res.json(userSessions);
+});
+
+// Logout specific session
+app.delete("/api/sessions/:id", adminOrUser, async (req, res) => {
+  const username = req.headers["x-user-username"] as string;
+  const { id } = req.params;
+  const db = await readDBFromFirestore();
+  if (db.sessions) {
+    db.sessions = db.sessions.filter(s => !(s.id === id && s.username === username));
+    await writeDBToFirestore(db);
+  }
+  res.json({ success: true });
+});
+
+// Change Password
+app.post("/api/auth/change-password", adminOrUser, async (req, res) => {
+  const username = req.headers["x-user-username"] as string;
+  const { currentPassword, newPassword } = req.body;
+  const db = await readDBFromFirestore();
+  const user = db.users?.find(u => u.username === username && u.password === currentPassword);
+  if (!user) {
+    return res.status(401).json({ error: "Cari şifrə yanlışdır." });
+  }
+  user.password = newPassword;
+  await writeDBToFirestore(db);
+  res.json({ success: true });
 });
 
 // Users list for admin
@@ -186,7 +245,7 @@ app.get("/api/users", adminOnly, async (req, res) => {
 app.post("/api/users/:username/role", adminOnly, async (req, res) => {
   const { username } = req.params;
   const { role } = req.body;
-  if (role !== "admin" && role !== "user" && role !== "moderator") {
+  if (role !== "admin" && role !== "user" && role !== "moderator" && role !== "2") {
     return res.status(400).json({ error: "Yanlış rol təyin edildi." });
   }
   const db = await readDBFromFirestore();

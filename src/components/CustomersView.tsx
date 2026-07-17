@@ -12,7 +12,9 @@ import {
   CreditCard,
   Calendar,
   DollarSign,
-  Trash2
+  Trash2,
+  Map as MapIcon,
+  List
 } from "lucide-react";
 import { Customer, Invoice, Payment } from "../types";
 import {
@@ -24,6 +26,13 @@ import {
   Tooltip,
   CartesianGrid
 } from "recharts";
+import { APIProvider, Map, AdvancedMarker, Pin, InfoWindow, useAdvancedMarkerRef } from '@vis.gl/react-google-maps';
+
+const API_KEY =
+  process.env.GOOGLE_MAPS_PLATFORM_KEY ||
+  (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
+  (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY ||
+  '';
 
 interface CustomersViewProps {
   customers: Customer[];
@@ -33,6 +42,29 @@ interface CustomersViewProps {
   setSelectedCustomer: (customer: Customer | null) => void;
   showToast?: (message: string, type?: "success" | "error" | "info") => void;
   currency?: string;
+}
+
+// Helper to generate deterministic fake coords based on id
+const generateMockCoords = (id: string) => {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = id.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const lat = 40.409264 + (hash % 100) / 1000;
+  const lng = 49.867092 + ((hash >> 2) % 100) / 1000;
+  return { lat, lng };
+};
+
+function CustomerMarker({ customer, onClick }: { key?: string | number, customer: Customer, onClick: () => void }) {
+  const [markerRef, marker] = useAdvancedMarkerRef();
+  const coords = customer.lat && customer.lng ? { lat: customer.lat, lng: customer.lng } : generateMockCoords(customer.id);
+  const hasDebt = customer.debtAmount > 0;
+  
+  return (
+    <AdvancedMarker ref={markerRef} position={coords} onClick={onClick}>
+      <Pin background={hasDebt ? "#ef4444" : "#10b981"} glyphColor="#fff" borderColor={hasDebt ? "#b91c1c" : "#047857"} />
+    </AdvancedMarker>
+  );
 }
 
 export default function CustomersView({ 
@@ -45,6 +77,7 @@ export default function CustomersView({
   currency = "AZN"
 }: CustomersViewProps) {
   const [search, setSearch] = useState("");
+  const [viewMode, setViewMode] = useState<"list" | "map">("list");
   const savedUser = localStorage.getItem("erp_user");
   const isAdmin = savedUser ? JSON.parse(savedUser).role === "admin" : false;
   const [showAddModal, setShowAddModal] = useState(false);
@@ -172,17 +205,35 @@ export default function CustomersView({
             <h2 className="text-xl font-semibold text-slate-800 tracking-tight">Müştəri Portfeli</h2>
             <p className="text-xs text-slate-500">Müştərilərin siyahısı, dövriyyəsi, ödənişləri və qalıq borcları.</p>
           </div>
-          <button 
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition cursor-pointer shadow-md shadow-indigo-600/10 self-start md:self-auto"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Müştəri Əlavə Et</span>
-          </button>
+          <div className="flex items-center space-x-3 self-start md:self-auto">
+            <div className="flex items-center bg-slate-200/60 p-1 rounded-lg">
+              <button 
+                onClick={() => setViewMode("list")}
+                className={`px-3 py-1.5 rounded text-xs font-semibold flex items-center space-x-1.5 transition ${viewMode === "list" ? "bg-white text-slate-800 shadow-xs" : "text-slate-500 hover:text-slate-700"}`}
+              >
+                <List className="w-3.5 h-3.5" />
+                <span>Siyahı</span>
+              </button>
+              <button 
+                onClick={() => setViewMode("map")}
+                className={`px-3 py-1.5 rounded text-xs font-semibold flex items-center space-x-1.5 transition ${viewMode === "map" ? "bg-white text-slate-800 shadow-xs" : "text-slate-500 hover:text-slate-700"}`}
+              >
+                <MapIcon className="w-3.5 h-3.5" />
+                <span>Xəritə</span>
+              </button>
+            </div>
+            <button 
+              onClick={() => setShowAddModal(true)}
+              className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition cursor-pointer shadow-md shadow-indigo-600/10"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Müştəri Əlavə Et</span>
+            </button>
+          </div>
         </div>
 
         {/* Filter and Table Card */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 md:p-5 space-y-4 md:flex-1 md:flex md:flex-col md:overflow-hidden md:min-h-[400px]">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 md:p-5 space-y-4 flex-1 flex flex-col overflow-hidden min-h-[400px]">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shrink-0">
             <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
@@ -199,14 +250,45 @@ export default function CustomersView({
             </div>
           </div>
 
-          <div className="md:flex-1 md:overflow-y-auto">
+          <div className="flex-1 flex flex-col overflow-hidden relative">
             {loading ? (
               <div className="py-12 flex flex-col items-center justify-center space-y-3">
                 <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
                 <p className="text-slate-500 text-xs">Müştərilər yüklənir...</p>
               </div>
+            ) : viewMode === "map" ? (
+              <div className="w-full h-full rounded-lg overflow-hidden border border-slate-200 relative min-h-[300px]">
+                {API_KEY ? (
+                  <APIProvider apiKey={API_KEY} version="weekly">
+                    <Map
+                      defaultCenter={{lat: 40.409264, lng: 49.867092}}
+                      defaultZoom={11}
+                      mapId="DEMO_MAP_ID"
+                      internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
+                      style={{width: '100%', height: '100%'}}
+                      gestureHandling="greedy"
+                    >
+                      {filteredCustomers.map(cust => (
+                        <CustomerMarker 
+                          key={cust.id} 
+                          customer={cust} 
+                          onClick={() => setSelectedCustomer(cust)} 
+                        />
+                      ))}
+                    </Map>
+                  </APIProvider>
+                ) : (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-50 p-6 text-center z-10">
+                    <MapIcon className="w-12 h-12 text-slate-300 mb-3" />
+                    <h3 className="text-sm font-bold text-slate-700">Google Maps API Açarınız Yoxdur</h3>
+                    <p className="text-xs text-slate-500 mt-2 max-w-sm leading-relaxed">
+                      Xəritədə müştəri ünvanlarını göstərmək üçün <code>GOOGLE_MAPS_PLATFORM_KEY</code> adlı mühit dəyişənini (API Key) Settings &gt; Secrets vasitəsilə daxil edin.
+                    </p>
+                  </div>
+                )}
+              </div>
             ) : (
-              <>
+              <div className="flex-1 overflow-y-auto">
                 {/* Desktop Table View */}
                 <div className="hidden md:block">
                   <table className="w-full text-left">
@@ -408,7 +490,7 @@ export default function CustomersView({
                     </div>
                   )}
                 </div>
-              </>
+              </div>
             )}
           </div>
         </div>

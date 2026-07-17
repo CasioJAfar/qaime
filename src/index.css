@@ -6,6 +6,15 @@
   --font-display: "Space Grotesk", sans-serif;
 }
 
+html.dark {
+  filter: invert(1) hue-rotate(180deg);
+  background-color: #f8fafc;
+}
+
+html.dark img, html.dark video, html.dark iframe, html.dark .no-invert {
+  filter: invert(1) hue-rotate(180deg);
+}
+
 @media print {
   @page { margin: 0; }
   body { padding: 1.5cm; }

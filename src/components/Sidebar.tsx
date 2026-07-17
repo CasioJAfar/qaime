@@ -22,12 +22,12 @@ interface SidebarProps {
 
 export default function Sidebar({ activeTab, setActiveTab, currentUser, onLogout }: SidebarProps) {
   const menuItems = [
-    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    ...(currentUser?.role !== "2" ? [{ id: "dashboard", label: "Dashboard", icon: LayoutDashboard }] : []),
     { id: "invoices", label: "Qaimələr", icon: FileText },
-    { id: "customers", label: "Müştərilər", icon: Users },
+    ...(currentUser?.role !== "2" ? [{ id: "customers", label: "Müştərilər", icon: Users }] : []),
     { id: "debts", label: "Borclar", icon: CreditCard },
     { id: "reports", label: "Hesabatlar", icon: FileSpreadsheet },
-    ...(currentUser?.role !== "user" ? [{ id: "profit", label: "Xərc və Mənfəət", icon: TrendingUp }] : []),
+    ...(currentUser?.role !== "user" && currentUser?.role !== "2" ? [{ id: "profit", label: "Xərc və Mənfəət", icon: TrendingUp }] : []),
     ...(currentUser?.role !== "user" ? [{ id: "contacts", label: "Müştəri məlumatları", icon: Book }] : []),
     ...(currentUser?.role === "admin" ? [{ id: "admin_panel", label: "Admin Panel", icon: Shield }] : []),
     { id: "settings", label: "Ayarlar", icon: Settings },
@@ -39,10 +39,19 @@ export default function Sidebar({ activeTab, setActiveTab, currentUser, onLogout
       <aside className="hidden md:flex w-60 bg-[#1E293B] flex-col h-full shrink-0 border-r border-[#334155] print:hidden">
         {/* Brand Header */}
         <div className="p-6 flex items-center gap-3">
-          <div className="w-8 h-8 bg-indigo-500 rounded flex items-center justify-center font-bold text-white shadow-lg font-display">
-            Q
+          <img src="/logo.png" alt="Star Boya" className="h-10 w-auto object-contain" onError={(e) => {
+            // Fallback if logo is not uploaded yet
+            e.currentTarget.style.display = 'none';
+            if (e.currentTarget.nextElementSibling) {
+              (e.currentTarget.nextElementSibling as HTMLElement).style.display = 'flex';
+            }
+          }} />
+          <div className="hidden items-center gap-3" style={{ display: 'none' }}>
+            <div className="w-8 h-8 bg-indigo-500 rounded flex items-center justify-center font-bold text-white shadow-lg font-display">
+              S
+            </div>
+            <span className="text-white font-bold text-lg tracking-tight font-display">STAR BOYA</span>
           </div>
-          <span className="text-white font-bold text-lg tracking-tight font-display">QAİMƏ.PRO</span>
         </div>
 
         {/* Navigation Menu */}

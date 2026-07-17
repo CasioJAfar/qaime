@@ -31,7 +31,16 @@ export default function App() {
     return null;
   });
 
-  const [activeTab, setActiveTab] = useState<string>("dashboard");
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    const saved = localStorage.getItem("erp_user");
+    if (saved) {
+      try {
+        const user = JSON.parse(saved);
+        if (user.role === "2") return "invoices";
+      } catch (e) {}
+    }
+    return "dashboard";
+  });
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -143,6 +152,15 @@ export default function App() {
       phone: "+994 (50) 000-00-00"
     };
   });
+
+  // Apply dark mode on mount
+  useEffect(() => {
+    if (localStorage.getItem("erp_theme") === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  }, []);
 
   const updateSettings = (newCurrency: string, newUserInfo: { companyName: string; ownerName: string; email: string; phone: string; }) => {
     setCurrency(newCurrency);
@@ -285,6 +303,11 @@ export default function App() {
         <LoginView onLoginSuccess={(user) => {
           setCurrentUser(user);
           localStorage.setItem("erp_user", JSON.stringify(user));
+          if (user.role === "2") {
+            setActiveTab("invoices");
+          } else {
+            setActiveTab("dashboard");
+          }
         }} />
         {/* Toast Overlay for login errors/notifications */}
         <div className="fixed top-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none max-w-sm w-full">
@@ -413,7 +436,7 @@ export default function App() {
                 />
               )}
 
-              {activeTab === "profit" && currentUser.role !== "user" && (
+              {activeTab === "profit" && currentUser.role !== "user" && currentUser.role !== "2" && (
                 <ProfitView 
                   invoices={invoices} 
                   currency={currency}

@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Lock, User, AlertCircle, ShieldAlert } from "lucide-react";
 
 interface LoginViewProps {
-  onLoginSuccess: (user: { username: string; role: string }) => void;
+  onLoginSuccess: (user: { username: string; role: string; sessionId?: string }) => void;
 }
 
 export default function LoginView({ onLoginSuccess }: LoginViewProps) {
@@ -17,12 +17,14 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
     setError(null);
 
     try {
+      const deviceInfo = navigator.userAgent;
+      
       const res = await fetch("/api/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, password, deviceInfo }),
       });
 
       const data = await res.json();
@@ -30,7 +32,7 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
         throw new Error(data.error || "Giriş uğursuz oldu.");
       }
 
-      onLoginSuccess({ username: data.username, role: data.role });
+      onLoginSuccess({ username: data.username, role: data.role, sessionId: data.sessionId });
     } catch (err: any) {
       setError(err.message || "Bilinməyən xəta baş verdi.");
     } finally {
