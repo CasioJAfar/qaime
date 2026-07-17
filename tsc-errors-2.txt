@@ -1,0 +1,1 @@
+server.ts(7,18): error TS1005: 'from' expected.

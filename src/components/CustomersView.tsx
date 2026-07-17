@@ -16,7 +16,7 @@ import {
   Map as MapIcon,
   List
 } from "lucide-react";
-import { Customer, Invoice, Payment } from "../types";
+import { Customer, Invoice} from "../types";
 import {
   ResponsiveContainer,
   LineChart,

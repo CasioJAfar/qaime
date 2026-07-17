@@ -37,24 +37,12 @@ interface DashboardViewProps {
 }
 
 export default function DashboardView({ data, loading, onNavigate, onSelectInvoice, invoices = [], customers = [], currency = "AZN" }: DashboardViewProps) {
-  if (loading) {
-    return (
-      <div className="flex-1 flex items-center justify-center p-12">
-        <div className="flex flex-col items-center space-y-4">
-          <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-slate-500 font-medium">Dashboard məlumatları yüklənir...</p>
-        </div>
-      </div>
-    );
-  }
+  const [currentTime, setCurrentTime] = React.useState(new Date());
 
-  if (!data) {
-    return (
-      <div className="flex-1 p-8 text-center text-slate-500">
-        Məlumat tapılmadı. Zəhmət olmasa səhifəni yeniləyin və ya verilənlər bazasını sıfırlayın.
-      </div>
-    );
-  }
+  React.useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Format currency
   const formatAZN = (val: number) => {
@@ -157,6 +145,25 @@ export default function DashboardView({ data, loading, onNavigate, onSelectInvoi
     { monthName: "İyun 2026", totalSales: 42000, unpaidDebt: 15300 },
   ];
 
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-12">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-slate-500 font-medium">Dashboard məlumatları yüklənir...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="flex-1 p-8 text-center text-slate-500">
+        Məlumat tapılmadı. Zəhmət olmasa səhifəni yeniləyin və ya verilənlər bazasını sıfırlayın.
+      </div>
+    );
+  }
+
   const kpis = [
     {
       title: "Ümumi Qaimə Sayı",
@@ -233,11 +240,25 @@ export default function DashboardView({ data, loading, onNavigate, onSelectInvoi
     <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-[#F8FAFC] space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0 shrink-0">
-        <div>
-          <h2 className="text-xl font-semibold text-slate-800 tracking-tight">Maliyyə Paneli</h2>
-          <p className="text-xs text-slate-500">Müəssisənizin qaimə və borclarının real-vaxt analitikası.</p>
+        <div className="min-w-0 flex-1 pr-4">
+          <div className="flex items-center space-x-3">
+            <h2 className="text-xl font-semibold text-slate-800 tracking-tight truncate">Maliyyə Paneli</h2>
+            <div className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 bg-white border border-slate-200 rounded-md shadow-sm">
+              <Clock className="w-3.5 h-3.5 text-indigo-500" />
+              <span className="text-xs font-mono font-medium text-slate-600">
+                {currentTime.toLocaleDateString('az-AZ')} {currentTime.toLocaleTimeString('az-AZ')}
+              </span>
+            </div>
+          </div>
+          <p className="text-xs text-slate-500 break-words whitespace-normal mt-1">Müəssisənizin qaimə və borclarının real-vaxt analitikası.</p>
         </div>
-        <div className="flex items-center space-x-3">
+        <div className="flex flex-wrap items-center gap-3 shrink-0">
+          <div className="flex sm:hidden items-center space-x-1.5 px-2.5 py-1 bg-white border border-slate-200 rounded-md shadow-sm">
+            <Clock className="w-3.5 h-3.5 text-indigo-500" />
+            <span className="text-xs font-mono font-medium text-slate-600">
+              {currentTime.toLocaleTimeString('az-AZ')}
+            </span>
+          </div>
           <button 
             onClick={() => onNavigate("invoices")} 
             className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-md transition-all cursor-pointer"

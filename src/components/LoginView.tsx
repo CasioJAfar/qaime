@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Lock, User, AlertCircle, ShieldAlert } from "lucide-react";
+import { Lock, User, AlertCircle} from "lucide-react";
 
 interface LoginViewProps {
   onLoginSuccess: (user: { username: string; role: string; sessionId?: string }) => void;
@@ -49,9 +49,9 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
       <div className="w-full max-w-md space-y-8 z-10">
         <div className="flex flex-col items-center">
           <div className="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center font-bold text-white shadow-xl text-2xl mb-4 font-display">
-            Q
+            S
           </div>
-          <h2 className="text-2xl font-black text-white tracking-tight font-display uppercase">QAİMƏ.PRO</h2>
+          <h2 className="text-2xl font-black text-white tracking-tight font-display uppercase">STAR BOYA</h2>
           <p className="mt-2 text-xs text-slate-400 font-medium">Bulud Əsaslı Qaimə və Borc İdarəetmə Sistemi</p>
         </div>
 
@@ -115,7 +115,6 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
               )}
             </button>
           </form>
-
 
         </div>
       </div>

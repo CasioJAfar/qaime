@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, } from "react";
 import { Plus, Trash2, Edit, Phone, MapPin, Search } from "lucide-react";
 import { Contact } from "../types";
 
@@ -57,16 +57,16 @@ export default function ContactsView({ contacts, onAddContact, onDeleteContact, 
   );
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 sm:p-6 rounded-lg shadow-sm border border-slate-200">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight font-display">Şəxsi Müştəri Məlumatları</h2>
-          <p className="text-slate-500 text-sm mt-1">Burada şəxsi müştərilərinizin əlaqə məlumatlarını (telefon və ünvan) yadda saxlaya bilərsiniz.</p>
+    <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-[#F8FAFC] space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 sm:p-6 rounded-lg shadow-sm border border-slate-200 shrink-0">
+        <div className="min-w-0 flex-1 pr-4">
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight font-display truncate">Şəxsi Müştəri Məlumatları</h2>
+          <p className="text-slate-500 text-sm mt-1 break-words whitespace-normal">Burada şəxsi müştərilərinizin əlaqə məlumatlarını (telefon və ünvan) yadda saxlaya bilərsiniz.</p>
         </div>
         {isAdminOrModerator && (
           <button 
             onClick={() => handleOpenModal()}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-md font-medium transition shadow-sm w-full sm:w-auto justify-center"
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-md font-medium transition shadow-sm w-full sm:w-auto justify-center shrink-0"
           >
             <Plus className="w-5 h-5" />
             <span className="hidden sm:inline">Yeni Əlavə Et</span>

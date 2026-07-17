@@ -31,6 +31,28 @@ interface SettingsViewProps {
   showToast?: (message: string, type?: "success" | "error" | "info") => void;
 }
 
+const IpLocation = ({ ip }: { ip: string }) => {
+  const [location, setLocation] = useState<string>("");
+
+  useEffect(() => {
+    if (!ip || ip === "Bilinməyən IP" || ip === "127.0.0.1" || ip === "::1" || ip.startsWith("192.168.") || ip.startsWith("10.") || ip.startsWith("172.")) {
+      if (ip === "127.0.0.1" || ip === "::1" || ip.startsWith("192.168.") || ip.startsWith("10.") || ip.startsWith("172.")) setLocation("Yerli Şəbəkə");
+      return;
+    }
+    fetch(`https://ipwho.is/${ip}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.country) {
+          setLocation(data.country);
+        }
+      })
+      .catch(() => {});
+  }, [ip]);
+
+  if (!location) return null;
+  return <span className="text-indigo-600 font-semibold ml-1">({location})</span>;
+};
+
 export default function SettingsView({ onResetDB, currency, userInfo, onUpdateSettings, showToast }: SettingsViewProps) {
   const [resetSuccess, setResetSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -412,8 +434,8 @@ export default function SettingsView({ onResetDB, currency, userInfo, onUpdateSe
                   <div key={s.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-white border border-slate-200 p-3 rounded-lg shadow-xs">
                     <div>
                       <div className="text-xs font-bold text-slate-800">{s.device}</div>
-                      <div className="text-[10px] text-slate-500 mt-0.5 space-x-2">
-                        <span>IP: <span className="font-mono">{s.ip}</span></span>
+                      <div className="text-[10px] text-slate-500 mt-0.5 space-x-2 flex items-center">
+                        <span className="flex items-center">IP: <span className="font-mono ml-1">{s.ip}</span><IpLocation ip={s.ip} /></span>
                         <span>•</span>
                         <span>Son aktivlik: {new Date(s.lastActive).toLocaleString('az-AZ')}</span>
                       </div>

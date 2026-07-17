@@ -4,7 +4,7 @@ import path from "path";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
-import * as XLSX from "xlsx";
+
 import { PDFParse } from "pdf-parse";
 
 dotenv.config();
@@ -18,7 +18,7 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 // Render Persistent Disk support or local development
 const RENDER_DISK_DIR = "/data";
-const DB_FILE = fs.existsSync(RENDER_DISK_DIR)
+const _DB_FILE = fs.existsSync(RENDER_DISK_DIR)
   ? path.join(RENDER_DISK_DIR, "db.json")
   : path.join(process.cwd(), "db.json");
 
@@ -170,7 +170,7 @@ function normalizeCustomerName(name: string): string {
 // API Routes
 
 // Authentication API
-app.post("/api/login", async (req, res) => {
+app.post("/api/login", async (_req, res) => {
   const { username, password, deviceInfo } = req.body;
   const normalizedUsername = (username || "").toLowerCase().trim();
   const db = await readDBFromFirestore();
@@ -201,7 +201,7 @@ app.post("/api/login", async (req, res) => {
 });
 
 // Get user active sessions
-app.get("/api/sessions", adminOrUser, async (req, res) => {
+app.get("/api/sessions", adminOrUser, async (_req, res) => {
   const username = req.headers["x-user-username"] as string;
   const db = await readDBFromFirestore();
   const userSessions = (db.sessions || []).filter(s => s.username === username);
@@ -209,7 +209,7 @@ app.get("/api/sessions", adminOrUser, async (req, res) => {
 });
 
 // Logout specific session
-app.delete("/api/sessions/:id", adminOrUser, async (req, res) => {
+app.delete("/api/sessions/:id", adminOrUser, async (_req, res) => {
   const username = req.headers["x-user-username"] as string;
   const { id } = req.params;
   const db = await readDBFromFirestore();
@@ -221,7 +221,7 @@ app.delete("/api/sessions/:id", adminOrUser, async (req, res) => {
 });
 
 // Change Password
-app.post("/api/auth/change-password", adminOrUser, async (req, res) => {
+app.post("/api/auth/change-password", adminOrUser, async (_req, res) => {
   const username = req.headers["x-user-username"] as string;
   const { currentPassword, newPassword } = req.body;
   const db = await readDBFromFirestore();
@@ -235,14 +235,14 @@ app.post("/api/auth/change-password", adminOrUser, async (req, res) => {
 });
 
 // Users list for admin
-app.get("/api/users", adminOnly, async (req, res) => {
+app.get("/api/users", adminOnly, async (_req, res) => {
   const db = await readDBFromFirestore();
   const users = db.users || [];
   res.json(users.map(u => ({ username: u.username, role: u.role })));
 });
 
 // Update user role by admin
-app.post("/api/users/:username/role", adminOnly, async (req, res) => {
+app.post("/api/users/:username/role", adminOnly, async (_req, res) => {
   const { username } = req.params;
   const { role } = req.body;
   if (role !== "admin" && role !== "user" && role !== "moderator" && role !== "2") {
@@ -265,7 +265,7 @@ app.post("/api/users/:username/role", adminOnly, async (req, res) => {
 });
 
 // Backup/Restore API
-app.get("/api/backup", adminOnly, async (req, res) => {
+app.get("/api/backup", adminOnly, async (_req, res) => {
   const db = await readDBFromFirestore();
   res.setHeader("Content-Disposition", "attachment; filename=erp_backup.json");
   res.setHeader("Content-Type", "application/json");
@@ -273,7 +273,7 @@ app.get("/api/backup", adminOnly, async (req, res) => {
   await addLog("backup_download", "Məlumatların ehtiyat nüsxəsi (JSON) yükləndi", req);
 });
 
-app.post("/api/restore", adminOnly, async (req, res) => {
+app.post("/api/restore", adminOnly, async (_req, res) => {
   try {
     const backupData = req.body;
     if (!backupData || typeof backupData !== "object") {
@@ -303,13 +303,13 @@ app.post("/api/restore", adminOnly, async (req, res) => {
 });
 
 // Logs API
-app.get("/api/logs", adminOnly, async (req, res) => {
+app.get("/api/logs", adminOnly, async (_req, res) => {
   const db = await readDBFromFirestore();
   res.json(db.logs || []);
 });
 
 // 1. Dashboard API
-app.get("/api/dashboard", async (req, res) => {
+app.get("/api/dashboard", async (_req, res) => {
   const db = await readDBFromFirestore();
   
   // Calculate stats
@@ -384,13 +384,13 @@ app.get("/api/dashboard", async (req, res) => {
 });
 
 // 2. Invoices API
-app.get("/api/invoices", async (req, res) => {
+app.get("/api/invoices", async (_req, res) => {
   const db = await readDBFromFirestore();
   res.json(db.invoices);
 });
 
 // Add manual invoice
-app.post("/api/invoices", adminOrUser, async (req, res) => {
+app.post("/api/invoices", adminOrUser, async (_req, res) => {
   const { invoiceNumber, customerName, customerCode, invoiceDate, totalAmount, items, sourceFile, sourceFileType } = req.body;
   
   if (!customerName || !totalAmount) {
@@ -444,7 +444,7 @@ app.post("/api/invoices", adminOrUser, async (req, res) => {
 });
 
 // 3. Delete Invoice
-app.delete("/api/invoices/:id", adminOnly, async (req, res) => {
+app.delete("/api/invoices/:id", adminOnly, async (_req, res) => {
   const { id } = req.params;
   const db = await readDBFromFirestore();
   
@@ -462,7 +462,7 @@ app.delete("/api/invoices/:id", adminOnly, async (req, res) => {
 });
 
 // Update Invoice
-app.put("/api/invoices/:id", adminOrUser, async (req, res) => {
+app.put("/api/invoices/:id", adminOrUser, async (_req, res) => {
   const { id } = req.params;
   const { invoiceNumber, customerName, customerCode, invoiceDate, totalAmount, items, sourceFile, sourceFileType } = req.body;
   
@@ -495,7 +495,7 @@ app.put("/api/invoices/:id", adminOrUser, async (req, res) => {
 });
 
 // 4. Customers API
-app.get("/api/customers", async (req, res) => {
+app.get("/api/customers", async (_req, res) => {
   const db = await readDBFromFirestore();
   
   // Aggregate billing details per customer
@@ -550,7 +550,7 @@ app.get("/api/customers", async (req, res) => {
 });
 
 // Add manual customer
-app.post("/api/customers", adminOrUser, async (req, res) => {
+app.post("/api/customers", adminOrUser, async (_req, res) => {
   const { name, code } = req.body;
   if (!name) {
     return res.status(400).json({ error: "Müştəri adı vacibdir." });
@@ -583,7 +583,7 @@ app.post("/api/customers", adminOrUser, async (req, res) => {
 });
 
 // Update customer API
-app.put("/api/customers/:id", adminOrUser, async (req, res) => {
+app.put("/api/customers/:id", adminOrUser, async (_req, res) => {
   const { id } = req.params;
   const { name, code } = req.body;
   if (!name) {
@@ -634,7 +634,7 @@ app.put("/api/customers/:id", adminOrUser, async (req, res) => {
 });
 
 // Delete customer API
-app.delete("/api/customers/:id", adminOnly, async (req, res) => {
+app.delete("/api/customers/:id", adminOnly, async (_req, res) => {
   const { id } = req.params;
   const db = await readDBFromFirestore();
   const index = db.customers.findIndex(c => c.id === id);
@@ -660,7 +660,7 @@ app.delete("/api/customers/:id", adminOnly, async (req, res) => {
 });
 
 // 5. Customer Payment (Ödəniş qəbulu)
-app.post("/api/customers/:id/payment", adminOrUser, async (req, res) => {
+app.post("/api/customers/:id/payment", adminOrUser, async (_req, res) => {
   const { id } = req.params;
   const { amount, paymentDate, note, invoiceId } = req.body;
 
@@ -704,7 +704,7 @@ app.post("/api/customers/:id/payment", adminOrUser, async (req, res) => {
 });
 
 // Delete/Undo Payment (Ödənişin silinməsi / geri alınması)
-app.delete("/api/payments/:id", adminOnly, async (req, res) => {
+app.delete("/api/payments/:id", adminOnly, async (_req, res) => {
   const { id } = req.params;
   const db = await readDBFromFirestore();
 
@@ -733,7 +733,7 @@ app.delete("/api/payments/:id", adminOnly, async (req, res) => {
 });
 
 // 6. Reset Database API
-app.get("/api/reset", adminOnly, async (req, res) => {
+app.get("/api/reset", adminOnly, async (_req, res) => {
   await writeDBToFirestore(initialDB);
   await addLog("database_reset", "Bütün verilənlər bazası sıfırlandı və ilkin vəziyyətinə gətirildi", req);
   res.json({ success: true, message: "Məlumatlar sıfırlandı." });
@@ -978,7 +978,7 @@ async function parseInvoiceDeterministically(base64Data: string, fileName: strin
 }
 
 // 7. Gemini Invoice Analysis API
-app.post("/api/invoices/upload", adminOrUser, async (req, res) => {
+app.post("/api/invoices/upload", adminOrUser, async (_req, res) => {
   let { base64Data, fileName, mimeType } = req.body;
 
   if (!base64Data || !mimeType) {
@@ -1020,12 +1020,12 @@ app.post("/api/invoices/upload", adminOrUser, async (req, res) => {
 
 
 // 8. Contacts API
-app.get("/api/contacts", async (req, res) => {
+app.get("/api/contacts", async (_req, res) => {
   const db = await readDBFromFirestore();
   res.json(db.contacts || []);
 });
 
-app.post("/api/contacts", adminOrUser, async (req, res) => {
+app.post("/api/contacts", adminOrUser, async (_req, res) => {
   const { name, phone, address } = req.body;
   if (!name) return res.status(400).json({ error: "Müştəri adı vacibdir." });
   
@@ -1046,7 +1046,7 @@ app.post("/api/contacts", adminOrUser, async (req, res) => {
   res.status(201).json(newContact);
 });
 
-app.put("/api/contacts/:id", adminOrUser, async (req, res) => {
+app.put("/api/contacts/:id", adminOrUser, async (_req, res) => {
   const { id } = req.params;
   const { name, phone, address } = req.body;
   
@@ -1065,7 +1065,7 @@ app.put("/api/contacts/:id", adminOrUser, async (req, res) => {
   res.json({ success: true, contact });
 });
 
-app.delete("/api/contacts/:id", adminOnly, async (req, res) => {
+app.delete("/api/contacts/:id", adminOnly, async (_req, res) => {
   const { id } = req.params;
   const db = await readDBFromFirestore();
   if (!db.contacts) db.contacts = [];
@@ -1092,7 +1092,7 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-    app.get("*", async (req, res) => {
+    app.get("*", async (_req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }

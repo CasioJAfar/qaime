@@ -10,9 +10,7 @@ import {
   CheckCircle, 
   Eye, 
   AlertCircle,
-  TrendingUp,
-  FileSpreadsheet
-} from "lucide-react";
+  TrendingUp} from "lucide-react";
 import { Invoice, InvoiceItem, Customer } from "../types";
 
 interface InvoicesViewProps {

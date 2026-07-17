@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Shield, Clock, Terminal, User, RefreshCw, AlertTriangle, Search, Activity, Trash2 } from "lucide-react";
+import { Shield, Clock, Terminal, User, RefreshCw, AlertTriangle, Search, Activity} from "lucide-react";
 
 interface LogEntry {
   id: string;

@@ -39,19 +39,10 @@ export default function Sidebar({ activeTab, setActiveTab, currentUser, onLogout
       <aside className="hidden md:flex w-60 bg-[#1E293B] flex-col h-full shrink-0 border-r border-[#334155] print:hidden">
         {/* Brand Header */}
         <div className="p-6 flex items-center gap-3">
-          <img src="/logo.png" alt="Star Boya" className="h-10 w-auto object-contain" onError={(e) => {
-            // Fallback if logo is not uploaded yet
-            e.currentTarget.style.display = 'none';
-            if (e.currentTarget.nextElementSibling) {
-              (e.currentTarget.nextElementSibling as HTMLElement).style.display = 'flex';
-            }
-          }} />
-          <div className="hidden items-center gap-3" style={{ display: 'none' }}>
-            <div className="w-8 h-8 bg-indigo-500 rounded flex items-center justify-center font-bold text-white shadow-lg font-display">
-              S
-            </div>
-            <span className="text-white font-bold text-lg tracking-tight font-display">STAR BOYA</span>
+          <div className="w-8 h-8 bg-indigo-500 rounded flex items-center justify-center font-bold text-white shadow-lg font-display">
+            S
           </div>
+          <span className="text-white font-bold text-lg tracking-tight font-display">STAR BOYA</span>
         </div>
 
         {/* Navigation Menu */}
@@ -90,6 +81,22 @@ export default function Sidebar({ activeTab, setActiveTab, currentUser, onLogout
                 "Oxucu"
               }</p>
             </div>
+            <button 
+              onClick={() => {
+                const isDark = document.documentElement.classList.contains("dark");
+                if (isDark) {
+                  document.documentElement.classList.remove("dark");
+                  localStorage.setItem("erp_theme", "light");
+                } else {
+                  document.documentElement.classList.add("dark");
+                  localStorage.setItem("erp_theme", "dark");
+                }
+              }}
+              className="p-1.5 bg-slate-800 hover:bg-slate-700 rounded-md text-slate-400 hover:text-white transition cursor-pointer no-invert"
+              title="Gecə/Gündüz Rejimi"
+            >
+              <svg xmlns="http://www.03.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+            </button>
           </div>
 
           <button
