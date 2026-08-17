@@ -113,7 +113,7 @@ export default function InvoicesView({
 
   // Format currency
   const formatAZN = (val: number) => {
-    return new Intl.NumberFormat("az-AZ", { style: "currency", currency }).format(val);
+    return `${new Intl.NumberFormat("az-AZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val)} ₼`;
   };
 
   const [payingInvoiceId, setPayingInvoiceId] = useState<string | null>(null);
@@ -886,8 +886,8 @@ export default function InvoicesView({
                   }`}
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <span className="font-mono font-bold text-slate-900 text-sm">{inv.invoiceNumber}</span>
-                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                    <span className="font-mono font-bold text-slate-900 text-sm truncate mr-2">{inv.invoiceNumber}</span>
+                    <span className={`inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
                       inv.sourceFile ? "bg-emerald-50 text-emerald-700 border border-emerald-100" : "bg-blue-50 text-blue-700 border border-blue-100"
                     }`}>
                       {inv.sourceFile ? "Sənəd" : "Manual"}
@@ -897,20 +897,28 @@ export default function InvoicesView({
                   <div className="space-y-1 mb-3">
                     <div className="flex justify-between text-xs gap-2">
                       <span className="text-slate-400 font-medium shrink-0">Müştəri:</span>
-                      <div className="flex flex-col text-right">
+                      <div className="flex flex-col text-right overflow-hidden">
                         <span className="font-semibold text-slate-800 truncate" title={inv.customerName}>{inv.customerName}</span>
                         {inv.customerCode && (
-                          <span className="text-[10px] text-slate-500 font-mono mt-0.5">{inv.customerCode}</span>
+                          <span className="text-[10px] text-slate-500 font-mono mt-0.5 truncate">{inv.customerCode}</span>
                         )}
                       </div>
                     </div>
                     <div className="flex justify-between text-xs">
-                      <span className="text-slate-400 font-medium">Tarix:</span>
-                      <span className="text-slate-600">{inv.invoiceDate}</span>
+                      <span className="text-slate-400 font-medium shrink-0">Tarix:</span>
+                      <span className="text-slate-600 truncate">{inv.invoiceDate}</span>
+                    </div>
+                    <div className="flex justify-between text-xs pt-1 mt-1 border-t border-slate-100">
+                      <span className="text-slate-400 font-medium">Əsas Məbləğ:</span>
+                      <span className="font-mono font-semibold text-slate-600 truncate">{formatAZN(inv.totalAmount / 1.18)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400 font-medium">ƏDV Borcu:</span>
+                      <span className="font-mono font-semibold text-amber-600 truncate">{formatAZN((inv.totalAmount * 0.18) / 1.18)}</span>
                     </div>
                     <div className="flex justify-between text-xs pt-1 border-t border-dashed border-slate-250">
-                      <span className="text-slate-500 font-bold">Yekun Məbləğ:</span>
-                      <span className="font-mono font-bold text-indigo-650 text-sm">{formatAZN(inv.totalAmount)}</span>
+                      <span className="text-slate-500 font-bold shrink-0">Yekun Məbləğ:</span>
+                      <span className="font-mono font-bold text-indigo-650 text-sm truncate">{formatAZN(inv.totalAmount)}</span>
                     </div>
                   </div>
 

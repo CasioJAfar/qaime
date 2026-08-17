@@ -46,7 +46,7 @@ export default function DashboardView({ data, loading, onNavigate, onSelectInvoi
 
   // Format currency
   const formatAZN = (val: number) => {
-    return new Intl.NumberFormat("az-AZ", { style: "currency", currency }).format(val);
+    return `${new Intl.NumberFormat("az-AZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val)} ₼`;
   };
 
   // Current year-month in format "YYYY-MM"
@@ -253,10 +253,15 @@ export default function DashboardView({ data, loading, onNavigate, onSelectInvoi
           <p className="text-xs text-slate-500 break-words whitespace-normal mt-1">Müəssisənizin qaimə və borclarının real-vaxt analitikası.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3 shrink-0">
-          <div className="flex sm:hidden items-center space-x-1.5 px-2.5 py-1 bg-white border border-slate-200 rounded-md shadow-sm">
-            <Clock className="w-3.5 h-3.5 text-indigo-500" />
-            <span className="text-xs font-mono font-medium text-slate-600">
-              {currentTime.toLocaleTimeString('az-AZ')}
+          <div className="flex sm:hidden flex-col items-end bg-white border border-slate-200 rounded-md shadow-xs px-2.5 py-1">
+            <div className="flex items-center space-x-1.5">
+              <Clock className="w-3.5 h-3.5 text-indigo-500" />
+              <span className="text-xs font-mono font-medium text-slate-600">
+                {currentTime.toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
+            <span className="text-[9px] font-medium text-slate-400 mt-0.5">
+              {currentTime.toLocaleDateString('az-AZ', { day: 'numeric', month: 'short', year: 'numeric' })}
             </span>
           </div>
           <button 

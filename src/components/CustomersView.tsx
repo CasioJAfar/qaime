@@ -14,7 +14,8 @@ import {
   Banknote,
   Trash2,
   Map as MapIcon,
-  List
+  List,
+  Edit2
 } from "lucide-react";
 import { Customer, Invoice} from "../types";
 import {
@@ -83,7 +84,11 @@ export default function CustomersView({
   const [showAddModal, setShowAddModal] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState("");
   const [newCustomerCode, setNewCustomerCode] = useState("");
+  const [newCustomerAddress, setNewCustomerAddress] = useState("");
   
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingCustomerData, setEditingCustomerData] = useState<{id: string; name: string; code: string; address: string; lat?: number; lng?: number} | null>(null);
+
   // Custom inline deletion confirmation state
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   
@@ -91,7 +96,7 @@ export default function CustomersView({
   const [ledgerSearch, setLedgerSearch] = useState("");
 
   const formatAZN = (val: number) => {
-    return new Intl.NumberFormat("az-AZ", { style: "currency", currency }).format(val);
+    return `${new Intl.NumberFormat("az-AZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val)} ₼`;
   };
 
   // Dynamic payment history chart data
@@ -164,15 +169,32 @@ export default function CustomersView({
     }
   };
 
+  const extractLatLng = (input: string) => {
+    // Basic regex to find @lat,lng in google maps URL
+    const match = input.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+    if (match) {
+      return { lat: parseFloat(match[1]), lng: parseFloat(match[2]) };
+    }
+    return null;
+  };
+
   const handleAddCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCustomerName.trim()) return;
+
+    const coords = extractLatLng(newCustomerAddress);
 
     try {
       const res = await fetch("/api/customers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newCustomerName, code: newCustomerCode })
+        body: JSON.stringify({ 
+          name: newCustomerName, 
+          code: newCustomerCode,
+          address: newCustomerAddress,
+          lat: coords?.lat,
+          lng: coords?.lng
+        })
       });
 
       if (!res.ok) {
@@ -185,8 +207,57 @@ export default function CustomersView({
       }
       setNewCustomerName("");
       setNewCustomerCode("");
+      setNewCustomerAddress("");
       setShowAddModal(false);
       onCustomerAdded();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleEditCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCustomerData || !editingCustomerData.name.trim()) return;
+
+    const coords = extractLatLng(editingCustomerData.address);
+
+    try {
+      const res = await fetch(`/api/customers/${editingCustomerData.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          name: editingCustomerData.name, 
+          code: editingCustomerData.code,
+          address: editingCustomerData.address,
+          lat: coords?.lat || editingCustomerData.lat,
+          lng: coords?.lng || editingCustomerData.lng
+        })
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Müştəri məlumatları yenilənmədi.");
+      }
+
+      if (showToast) {
+        showToast("Müştəri uğurla yeniləndi!", "success");
+      }
+      
+      // Update selectedCustomer if it's the one being edited
+      if (selectedCustomer?.id === editingCustomerData.id) {
+        setSelectedCustomer({
+          ...selectedCustomer,
+          name: editingCustomerData.name,
+          code: editingCustomerData.code,
+          address: editingCustomerData.address,
+          lat: coords?.lat || editingCustomerData.lat,
+          lng: coords?.lng || editingCustomerData.lng
+        });
+      }
+
+      setShowEditModal(false);
+      setEditingCustomerData(null);
+      onCustomerAdded(); // This will refresh the customer list
     } catch (err: any) {
       alert(err.message);
     }
@@ -298,7 +369,9 @@ export default function CustomersView({
                         <th className="px-6 py-4 font-semibold text-center">Qaimə Sayı</th>
                         <th className="px-6 py-4 font-semibold text-right">Cəmi Satış</th>
                         <th className="px-6 py-4 font-semibold text-right">Ödənilmiş</th>
-                        <th className="px-6 py-4 font-semibold text-right">Qalıq Borc</th>
+                        <th className="px-6 py-4 font-semibold text-right">Əsas Borc</th>
+                        <th className="px-6 py-4 font-semibold text-right">ƏDV Borcu</th>
+                        <th className="px-6 py-4 font-semibold text-right">Cəmi Borc</th>
                         <th className="px-6 py-4 font-semibold text-right">Fəaliyyət</th>
                       </tr>
                     </thead>
@@ -335,6 +408,12 @@ export default function CustomersView({
                             <td className="px-6 py-3.5 text-right font-mono text-sm font-bold text-emerald-600">
                               {formatAZN(cust.paidAmount)}
                             </td>
+                            <td className="px-6 py-3.5 text-right font-mono text-sm text-slate-500">
+                              {formatAZN(cust.debtAmount / 1.18)}
+                            </td>
+                            <td className="px-6 py-3.5 text-right font-mono text-sm text-amber-600">
+                              {formatAZN((cust.debtAmount * 0.18) / 1.18)}
+                            </td>
                             <td className="px-6 py-3.5 text-right font-mono text-sm">
                               <span className={`font-bold ${hasDebt ? "text-rose-600" : "text-slate-400"}`}>
                                 {formatAZN(cust.debtAmount)}
@@ -349,8 +428,27 @@ export default function CustomersView({
                                   Bax
                                 </button>
                                 {isAdmin && (
-                                  deleteConfirmId === cust.id ? (
-                                    <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
+                                  <>
+                                    <button 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditingCustomerData({
+                                          id: cust.id,
+                                          name: cust.name,
+                                          code: cust.code || "",
+                                          address: cust.address || "",
+                                          lat: cust.lat,
+                                          lng: cust.lng
+                                        });
+                                        setShowEditModal(true);
+                                      }}
+                                      className="p-1 rounded bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-100 text-slate-600 hover:text-indigo-600 transition cursor-pointer"
+                                      title="Redaktə et"
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                    </button>
+                                    {deleteConfirmId === cust.id ? (
+                                      <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
                                       <button 
                                         onClick={() => {
                                           handleDeleteCustomer(cust.id);
@@ -378,8 +476,9 @@ export default function CustomersView({
                                     >
                                       <Trash2 className="w-3.5 h-3.5" />
                                     </button>
-                                  )
-                                )}
+                                  )}
+                                </>
+                              )}
                               </div>
                             </td>
                           </tr>
@@ -434,7 +533,15 @@ export default function CustomersView({
                             <span className="font-semibold text-emerald-600 font-mono">{formatAZN(cust.paidAmount)}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-slate-400 font-medium">Borc:</span>
+                            <span className="text-slate-400 font-medium">Əsas Borc:</span>
+                            <span className="font-semibold text-slate-500 font-mono">{formatAZN(cust.debtAmount / 1.18)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-400 font-medium">ƏDV Borcu:</span>
+                            <span className="font-semibold text-amber-600 font-mono">{formatAZN((cust.debtAmount * 0.18) / 1.18)}</span>
+                          </div>
+                          <div className="flex justify-between border-t border-slate-100 pt-2 mt-1">
+                            <span className="text-slate-500 font-bold">Cəmi Borc:</span>
                             <span className={`font-mono font-bold ${hasDebt ? "text-rose-600" : "text-slate-500"}`}>{formatAZN(cust.debtAmount)}</span>
                           </div>
                         </div>
@@ -471,12 +578,34 @@ export default function CustomersView({
                                 <span>Detallara Bax</span>
                               </button>
                               {isAdmin && (
-                                <button 
-                                  onClick={() => setDeleteConfirmId(cust.id)}
-                                  className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 transition cursor-pointer"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
+                                <>
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditingCustomerData({
+                                        id: cust.id,
+                                        name: cust.name,
+                                        code: cust.code || "",
+                                        address: cust.address || "",
+                                        lat: cust.lat,
+                                        lng: cust.lng
+                                      });
+                                      setShowEditModal(true);
+                                    }}
+                                    className="p-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-600 transition cursor-pointer"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setDeleteConfirmId(cust.id);
+                                    }}
+                                    className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 transition cursor-pointer"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
                               )}
                             </>
                           )}
@@ -529,7 +658,7 @@ export default function CustomersView({
 
           <div className="flex-1 overflow-y-auto p-5 space-y-5">
             {/* Quick Financial Overview inside panel */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-center">
                 <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Cəmi Satış</span>
                 <span className="block font-mono font-bold text-slate-800 text-xs mt-1">
@@ -542,15 +671,31 @@ export default function CustomersView({
                   {formatAZN(selectedCustomer.paidAmount)}
                 </span>
               </div>
-              <div className={`p-3 rounded-lg text-center border ${
+              <div className={`p-3 rounded-lg text-center border col-span-2 ${
                 selectedCustomer.debtAmount > 0.01 
                   ? "bg-rose-50 border-rose-100 text-rose-800" 
                   : "bg-slate-50 border-slate-100 text-slate-500"
               }`}>
-                <span className="text-[10px] uppercase font-bold tracking-wider">Qalıq Borc</span>
-                <span className="block font-mono font-bold text-xs mt-1">
-                  {formatAZN(selectedCustomer.debtAmount)}
-                </span>
+                <div className="grid grid-cols-3 gap-2 divide-x divide-rose-200/50">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold tracking-wider opacity-80">Əsas Borc</span>
+                    <span className="block font-mono font-bold text-xs mt-1">
+                      {formatAZN(selectedCustomer.debtAmount / 1.18)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold tracking-wider opacity-80">ƏDV Borcu</span>
+                    <span className="block font-mono font-bold text-xs mt-1">
+                      {formatAZN((selectedCustomer.debtAmount * 0.18) / 1.18)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold tracking-wider">Cəmi Borc</span>
+                    <span className="block font-mono font-bold text-xs mt-1">
+                      {formatAZN(selectedCustomer.debtAmount)}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -655,6 +800,9 @@ export default function CustomersView({
                         </div>
                         <div className="text-right">
                           <div className="font-mono font-bold text-xs text-indigo-600">{formatAZN(inv.totalAmount)}</div>
+                          <div className="text-[9px] text-slate-500 font-mono mt-0.5">
+                            Əsas: {formatAZN(inv.totalAmount / 1.18)} | ƏDV: {formatAZN((inv.totalAmount * 0.18) / 1.18)}
+                          </div>
                           <div className="text-[10px] text-slate-400 mt-1">
                             {inv.status === "paid" ? (
                               <span className="text-emerald-600 font-bold bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wider">Ödənilib</span>
@@ -791,6 +939,18 @@ export default function CustomersView({
                 />
               </div>
 
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Ünvan / Google Maps Linki (İstəyə bağlı)</label>
+                <input 
+                  type="text" 
+                  placeholder="Ünvan və ya Google Maps linki daxil edin"
+                  value={newCustomerAddress}
+                  onChange={(e) => setNewCustomerAddress(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-indigo-500"
+                />
+                <p className="text-[9px] text-slate-400 mt-1">Google Maps linki daxil edilərsə, xəritədə avtomatik göstəriləcək.</p>
+              </div>
+
               <div className="pt-2 flex items-center justify-end space-x-2 border-t border-slate-100">
                 <button 
                   type="button"
@@ -804,6 +964,82 @@ export default function CustomersView({
                   className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition cursor-pointer shadow-md"
                 >
                   Yarat
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Customer Modal */}
+      {showEditModal && editingCustomerData && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl border border-slate-200 max-w-md w-full p-5 shadow-xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold font-display text-slate-900">Müştəri Kartını Redaktə Et</h3>
+              <button 
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingCustomerData(null);
+                }}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditCustomer} className="space-y-4">
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Müştəri/Şirkət Adı</label>
+                <input 
+                  type="text" 
+                  placeholder="Məs. Abşeron Tikinti MMC"
+                  value={editingCustomerData.name}
+                  onChange={(e) => setEditingCustomerData({...editingCustomerData, name: e.target.value})}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-indigo-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Müştəri Kodu (VÖEN) (İstəyə bağlı)</label>
+                <input 
+                  type="text" 
+                  placeholder="Məs. 3103396091"
+                  value={editingCustomerData.code}
+                  onChange={(e) => setEditingCustomerData({...editingCustomerData, code: e.target.value})}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-indigo-500 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Ünvan / Google Maps Linki (İstəyə bağlı)</label>
+                <input 
+                  type="text" 
+                  placeholder="Ünvan və ya Google Maps linki daxil edin"
+                  value={editingCustomerData.address}
+                  onChange={(e) => setEditingCustomerData({...editingCustomerData, address: e.target.value})}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-indigo-500"
+                />
+                <p className="text-[9px] text-slate-400 mt-1">Google Maps linki daxil edilərsə, xəritədə avtomatik göstəriləcək.</p>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end space-x-2 border-t border-slate-100">
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setEditingCustomerData(null);
+                  }}
+                  className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+                >
+                  Ləğv Et
+                </button>
+                <button 
+                  type="submit"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition cursor-pointer shadow-md"
+                >
+                  Yadda Saxla
                 </button>
               </div>
             </form>

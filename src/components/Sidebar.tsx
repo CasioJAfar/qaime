@@ -38,7 +38,10 @@ export default function Sidebar({ activeTab, setActiveTab, currentUser, onLogout
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex w-60 bg-[#1E293B] flex-col h-full shrink-0 border-r border-[#334155] print:hidden">
         {/* Brand Header */}
-        <div className="p-6 flex items-center gap-3">
+        <div 
+          onClick={() => window.location.reload()}
+          className="p-6 flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
+        >
           <div className="w-8 h-8 bg-indigo-500 rounded flex items-center justify-center font-bold text-white shadow-lg font-display">
             S
           </div>

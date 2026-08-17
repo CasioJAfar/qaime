@@ -551,7 +551,7 @@ app.get("/api/customers", async (req, res) => {
 
 // Add manual customer
 app.post("/api/customers", adminOrUser, async (req, res) => {
-  const { name, code } = req.body;
+  const { name, code, address, lat, lng } = req.body;
   if (!name) {
     return res.status(400).json({ error: "Müştəri adı vacibdir." });
   }
@@ -571,6 +571,9 @@ app.post("/api/customers", adminOrUser, async (req, res) => {
     id: "cust-" + Date.now(),
     name: formattedName,
     code,
+    address,
+    lat,
+    lng,
     createdAt: new Date().toISOString()
   };
 
@@ -585,7 +588,7 @@ app.post("/api/customers", adminOrUser, async (req, res) => {
 // Update customer API
 app.put("/api/customers/:id", adminOrUser, async (req, res) => {
   const { id } = req.params;
-  const { name, code } = req.body;
+  const { name, code, address, lat, lng } = req.body;
   if (!name) {
     return res.status(400).json({ error: "Müştəri adı vacibdir." });
   }
@@ -612,6 +615,9 @@ app.put("/api/customers/:id", adminOrUser, async (req, res) => {
 
   customer.name = formattedName;
   if (code !== undefined) customer.code = code;
+  if (address !== undefined) customer.address = address;
+  if (lat !== undefined) customer.lat = lat;
+  if (lng !== undefined) customer.lng = lng;
 
   // Also update related invoices and payments if name changed
   if (nameChanged) {

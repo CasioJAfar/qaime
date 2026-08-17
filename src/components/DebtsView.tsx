@@ -43,7 +43,7 @@ export default function DebtsView({ customers, loading, onPaymentRecorded, curre
   );
 
   const formatAZN = (val: number) => {
-    return new Intl.NumberFormat("az-AZ", { style: "currency", currency }).format(val);
+    return `${new Intl.NumberFormat("az-AZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val)} ₼`;
   };
 
   const handleOpenPaymentModal = (cust: Customer) => {
@@ -286,13 +286,15 @@ export default function DebtsView({ customers, loading, onPaymentRecorded, curre
                   <th className="px-6 py-4 font-semibold">Müştəri adı</th>
                   <th className="px-6 py-4 text-right font-semibold">Dövriyyə</th>
                   <th className="px-6 py-4 text-right font-semibold">Ödənilmiş</th>
-                  <th className="px-6 py-4 text-right font-semibold">Qalıq Borc</th>
+                  <th className="px-6 py-4 text-right font-semibold">Əsas Borc</th>
+                  <th className="px-6 py-4 text-right font-semibold">ƏDV Borcu</th>
+                  <th className="px-6 py-4 text-right font-semibold">Cəmi Borc</th>
                   <th className="px-6 py-4 text-right font-semibold">Ödəniş</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
                 {debtorCustomers.map((cust) => {
-                  const paidPercentage = Math.round((cust.paidAmount / cust.totalAmount) * 100);
+                  const paidPercentage = Math.round((cust.paidAmount / cust.totalAmount) * 100) || 0;
                   const overdue = hasOverdueInvoices(cust);
                   return (
                     <tr key={cust.id} className={`transition duration-150 ${overdue ? "bg-rose-50/20 hover:bg-rose-50/45 border-l-2 border-l-rose-500" : "hover:bg-indigo-50/30"}`}>
@@ -314,6 +316,8 @@ export default function DebtsView({ customers, loading, onPaymentRecorded, curre
                       </td>
                       <td className="px-6 py-3.5 text-right font-mono text-xs font-semibold text-slate-880">{formatAZN(cust.totalAmount)}</td>
                       <td className="px-6 py-3.5 text-right font-mono text-xs text-emerald-600 font-semibold">{formatAZN(cust.paidAmount)}</td>
+                      <td className="px-6 py-3.5 text-right font-mono text-xs text-slate-500">{formatAZN(cust.debtAmount / 1.18)}</td>
+                      <td className="px-6 py-3.5 text-right font-mono text-xs text-amber-600">{formatAZN((cust.debtAmount * 0.18) / 1.18)}</td>
                       <td className="px-6 py-3.5 text-right font-mono font-bold">
                         <div className="flex flex-col items-end">
                           <span className={overdue ? "text-rose-700 text-sm flex items-center gap-1 bg-rose-100/50 border border-rose-200 px-2.5 py-0.5 rounded-lg font-bold" : "text-rose-600 text-sm"}>
@@ -383,8 +387,16 @@ export default function DebtsView({ customers, loading, onPaymentRecorded, curre
                       <span className="text-slate-400 font-medium">Ödənilən:</span>
                       <span className="font-semibold text-emerald-600 font-mono truncate">{formatAZN(cust.paidAmount)}</span>
                     </div>
+                    <div className="flex justify-between gap-2">
+                      <span className="text-slate-400 font-medium">Əsas Borc:</span>
+                      <span className="font-semibold text-slate-500 font-mono truncate">{formatAZN(cust.debtAmount / 1.18)}</span>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <span className="text-slate-400 font-medium">ƏDV Borcu:</span>
+                      <span className="font-semibold text-amber-600 font-mono truncate">{formatAZN((cust.debtAmount * 0.18) / 1.18)}</span>
+                    </div>
                     <div className="flex justify-between col-span-1 sm:col-span-2 pt-1 border-t border-slate-100 items-center gap-2">
-                      <span className="text-slate-550 font-bold">Qalıq Borc:</span>
+                      <span className="text-slate-550 font-bold">Cəmi Borc:</span>
                       <span className={`font-mono font-black text-sm ${overdue ? "text-rose-700 bg-rose-100/60 px-2 py-0.5 rounded border border-rose-200 font-black" : "text-rose-600"}`}>
                         {formatAZN(cust.debtAmount)}
                       </span>

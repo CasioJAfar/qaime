@@ -57,7 +57,7 @@ export default function ReportsView({ customers, invoices, loading, onInvoiceUpd
   const [confirmingInvoiceId, setConfirmingInvoiceId] = useState<string | null>(null);
 
   const formatAZN = (val: number) => {
-    return new Intl.NumberFormat("az-AZ", { style: "currency", currency }).format(val);
+    return `${new Intl.NumberFormat("az-AZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val)} ₼`;
   };
 
   const paidInvoices = invoices.filter(i => i.status === "paid");

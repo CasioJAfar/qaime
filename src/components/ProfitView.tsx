@@ -10,7 +10,7 @@ interface ProfitViewProps {
 
 export default function ProfitView({ invoices, currency = "AZN", showToast }: ProfitViewProps) {
   const formatAZN = (val: number) => {
-    return new Intl.NumberFormat("az-AZ", { style: "currency", currency }).format(val);
+    return `${new Intl.NumberFormat("az-AZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val)} ₼`;
   };
 
   const [activeTab, setActiveTab] = useState<"products" | "invoices">("products");

@@ -95,6 +95,7 @@ export default function SettingsView({ onResetDB, currency, userInfo, onUpdateSe
   };
 
   const [confirmReset, setConfirmReset] = useState(false);
+  const [resetPassword, setResetPassword] = useState("");
 
   // Sessions and Password states
   const [sessions, setSessions] = useState<any[]>([]);
@@ -469,19 +470,31 @@ export default function SettingsView({ onResetDB, currency, userInfo, onUpdateSe
               </div>
               {confirmReset ? (
                 <div className="flex items-center space-x-2">
-                  <span className="text-xs text-rose-600 font-bold animate-pulse">Əminsiniz?</span>
+                  <input
+                    type="password"
+                    placeholder="Şifrəni daxil edin"
+                    value={resetPassword}
+                    onChange={(e) => setResetPassword(e.target.value)}
+                    className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs w-32 focus:outline-hidden focus:border-rose-500"
+                  />
                   <button 
-                    onClick={handleReset}
-                    disabled={loading}
+                    onClick={() => {
+                      if (resetPassword === "1993") {
+                        handleReset();
+                      } else {
+                        showToast("Yalnış şifrə. Sıfırlama şifrəsi 1993 olmalıdır.", "error");
+                      }
+                    }}
+                    disabled={loading || resetPassword !== "1993"}
                     className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold transition cursor-pointer shadow-md"
                   >
                     Bəli, Sil!
                   </button>
                   <button 
-                    onClick={() => setConfirmReset(false)}
+                    onClick={() => { setConfirmReset(false); setResetPassword(""); }}
                     className="px-3 py-1.5 bg-slate-200 text-slate-700 hover:bg-slate-300 rounded-lg text-xs font-semibold transition cursor-pointer"
                   >
-                    Xeyr
+                    Ləğv et
                   </button>
                 </div>
               ) : (
