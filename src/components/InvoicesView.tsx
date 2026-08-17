@@ -1381,7 +1381,7 @@ export default function InvoicesView({
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-slate-400 block mb-1.5 uppercase tracking-wider">Yekun Məbləğ (AZN)</label>
+                  <label className="text-[10px] font-bold text-slate-400 block mb-1.5 uppercase tracking-wider">Yekun Məbləğ (₼)</label>
                   <input 
                     type="number" 
                     step="0.01"

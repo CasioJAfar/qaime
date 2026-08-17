@@ -11,7 +11,7 @@ import {
   X,
   CreditCard,
   Calendar,
-  DollarSign,
+  Banknote,
   Trash2,
   Map as MapIcon,
   List

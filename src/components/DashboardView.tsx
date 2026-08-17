@@ -3,7 +3,7 @@ import {
   FileText, 
   TrendingUp, 
   Users, 
-  DollarSign, 
+  Banknote, 
   ArrowUpRight, 
   AlertCircle,
   Clock,
@@ -213,7 +213,7 @@ export default function DashboardView({ data, loading, onNavigate, onSelectInvoi
     {
       title: "Yığılmalı Məbləğ",
       value: formatAZN(data.totalRemainingDebt),
-      icon: DollarSign,
+      icon: Banknote,
       color: "bg-rose-50 text-rose-600 border-rose-100",
       iconColor: "text-rose-600",
       desc: "Müştərilərin qalıq borcları",
@@ -307,7 +307,7 @@ export default function DashboardView({ data, loading, onNavigate, onSelectInvoi
               <p className="text-[11px] text-slate-400">Tarixlər üzrə satış məbləğlərinin dəyişməsi</p>
             </div>
             <div className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded">
-              AZN
+              ₼
             </div>
           </div>
           
@@ -337,7 +337,7 @@ export default function DashboardView({ data, loading, onNavigate, onSelectInvoi
                   tickFormatter={(val) => `${val}`}
                 />
                 <Tooltip 
-                  formatter={(value) => [`${value} AZN`, "Satış"]}
+                  formatter={(value) => [`${value} ₼`, "Satış"]}
                   labelFormatter={(label) => `Tarix: ${label}`}
                   contentStyle={{ backgroundColor: "#1e293b", borderRadius: "8px", border: "none", color: "#fff", fontSize: "11px" }}
                 />
@@ -427,10 +427,10 @@ export default function DashboardView({ data, loading, onNavigate, onSelectInvoi
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div>
               <h4 className="font-bold text-slate-700 tracking-tight uppercase text-xs">Aylıq Satış və Yığılmalı Məbləğ Müqayisəsi</h4>
-              <p className="text-[11px] text-slate-400">Hər ay üzrə ümumi satış dövriyyəsi və hələ də yığılmalı olan borc məbləği (AZN)</p>
+              <p className="text-[11px] text-slate-400">Hər ay üzrə ümumi satış dövriyyəsi və hələ də yığılmalı olan borc məbləği (₼)</p>
             </div>
             <div className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded">
-              AZN
+              ₼
             </div>
           </div>
 

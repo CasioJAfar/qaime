@@ -4,7 +4,7 @@ import {
   Search, 
   Plus, 
   CheckCircle, 
-  DollarSign, 
+  Banknote, 
   ArrowRight, 
   Clock, 
   X,
@@ -36,7 +36,7 @@ export default function DebtsView({ customers, loading, onPaymentRecorded, curre
   const [paymentNote, setPaymentNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // Filter only customers with active debt (> 0.01 AZN)
+  // Filter only customers with active debt (> 0.01 ₼)
   const debtorCustomers = customers.filter(c => 
     c.debtAmount > 0.01 && 
     c.name.toLowerCase().includes(search.toLowerCase())
@@ -230,7 +230,7 @@ export default function DebtsView({ customers, loading, onPaymentRecorded, curre
             <span className="text-[11px] text-slate-400 mt-1.5 block">Yazılmış bütün qaimələrin cəmi</span>
           </div>
           <div className="p-3 rounded-lg bg-slate-100 text-slate-700 border border-slate-200">
-            <DollarSign className="w-5 h-5" />
+            <Banknote className="w-5 h-5" />
           </div>
         </div>
 
@@ -535,7 +535,7 @@ export default function DebtsView({ customers, loading, onPaymentRecorded, curre
               )}
 
               <div>
-                <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Ödənilən Məbləğ (AZN)</label>
+                <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Ödənilən Məbləğ (₼)</label>
                 <input 
                   type="number" 
                   step="0.01"

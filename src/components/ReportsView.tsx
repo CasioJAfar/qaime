@@ -185,17 +185,17 @@ export default function ReportsView({ customers, invoices, loading, onInvoiceUpd
     let csvContent = "\uFEFF";
     
     if (reportType === "debtors") {
-      csvContent += "Müştəri Adı;Ümumi Satış (AZN);Ödənilmiş Məbləğ (AZN);Qalıq Borc (AZN);Qaimə Sayı\n";
+      csvContent += "Müştəri Adı;Ümumi Satış (₼);Ödənilmiş Məbləğ (₼);Qalıq Borc (₼);Qaimə Sayı\n";
       filteredCustomers.filter(c => c.debtAmount > 0.01).forEach(c => {
         csvContent += `"${c.name}";${c.totalAmount};${c.paidAmount};${c.debtAmount};${c.invoices?.length || 0}\n`;
       });
     } else if (reportType === "invoices") {
-      csvContent += "Qaimə Nömrəsi;Müştəri Adı;Qaimə Tarixi;Yekun Məbləğ (AZN);Sətir Sayı\n";
+      csvContent += "Qaimə Nömrəsi;Müştəri Adı;Qaimə Tarixi;Yekun Məbləğ (₼);Sətir Sayı\n";
       filteredInvoices.forEach(i => {
         csvContent += `"${i.invoiceNumber}";"${i.customerName}";"${i.invoiceDate}";${i.totalAmount};${i.items?.length || 0}\n`;
       });
     } else {
-      csvContent += "Müştəri Adı;Ümumi Satış (AZN);Ödənilmiş Məbləğ (AZN);Qalıq Borc (AZN);Qaimə Sayı\n";
+      csvContent += "Müştəri Adı;Ümumi Satış (₼);Ödənilmiş Məbləğ (₼);Qalıq Borc (₼);Qaimə Sayı\n";
       filteredCustomers.forEach(c => {
         csvContent += `"${c.name}";${c.totalAmount};${c.paidAmount};${c.debtAmount};${c.invoices?.length || 0}\n`;
       });
