@@ -285,13 +285,15 @@ export default function CustomersView({
                 <List className="w-3.5 h-3.5" />
                 <span>Siyahı</span>
               </button>
-              <button 
-                onClick={() => setViewMode("map")}
-                className={`px-3 py-1.5 rounded text-xs font-semibold flex items-center space-x-1.5 transition ${viewMode === "map" ? "bg-white text-slate-800 shadow-xs" : "text-slate-500 hover:text-slate-700"}`}
-              >
-                <MapIcon className="w-3.5 h-3.5" />
-                <span>Xəritə</span>
-              </button>
+              {API_KEY && (
+                <button 
+                  onClick={() => setViewMode("map")}
+                  className={`px-3 py-1.5 rounded text-xs font-semibold flex items-center space-x-1.5 transition ${viewMode === "map" ? "bg-white text-slate-800 shadow-xs" : "text-slate-500 hover:text-slate-700"}`}
+                >
+                  <MapIcon className="w-3.5 h-3.5" />
+                  <span>Xəritə</span>
+                </button>
+              )}
             </div>
             <button 
               onClick={() => setShowAddModal(true)}
