@@ -306,7 +306,7 @@ export default function CustomersView({
         </div>
 
         {/* Filter and Table Card */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 md:p-5 space-y-4 flex-1 flex flex-col overflow-hidden min-h-[400px]">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 md:p-5 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shrink-0">
             <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
@@ -323,7 +323,7 @@ export default function CustomersView({
             </div>
           </div>
 
-          <div className="flex-1 flex flex-col overflow-hidden relative">
+          <div className="relative">
             {loading ? (
               <div className="py-12 flex flex-col items-center justify-center space-y-3">
                 <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
@@ -361,9 +361,9 @@ export default function CustomersView({
                 )}
               </div>
             ) : (
-              <div className="flex-1 overflow-y-auto">
+              <div className="">
                 {/* Desktop Table View */}
-                <div className="hidden md:block">
+                <div className="overflow-x-auto hidden md:block">
                   <table className="w-full text-left">
                     <thead className="sticky top-0 bg-white z-10 shadow-xs">
                       <tr className="bg-slate-50 text-[10px] text-slate-500 uppercase tracking-[0.1em] border-b border-slate-200">

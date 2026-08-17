@@ -258,9 +258,9 @@ export default function DebtsView({ customers, loading, onPaymentRecorded, curre
       </div>
 
       {/* Main Lists Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start w-full max-w-full overflow-hidden">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         {/* Debtor Customers list (2 columns width) */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 md:p-5 space-y-4 lg:col-span-2 flex flex-col min-h-[400px] w-full max-w-full overflow-hidden">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 md:p-5 space-y-4 lg:col-span-2">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <h4 className="font-bold text-slate-700 tracking-tight uppercase text-xs">Borclu Müştərilər Siyahısı</h4>
@@ -279,7 +279,7 @@ export default function DebtsView({ customers, loading, onPaymentRecorded, curre
           </div>
 
           {/* Desktop Table View */}
-          <div className="overflow-x-auto flex-1 hidden md:block">
+          <div className="overflow-x-auto hidden md:block">
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-slate-50 text-[10px] text-slate-500 uppercase tracking-[0.1em] border-b border-slate-200">
@@ -350,7 +350,7 @@ export default function DebtsView({ customers, loading, onPaymentRecorded, curre
           </div>
 
           {/* Mobile Cards View */}
-          <div className="block md:hidden overflow-y-auto flex-1 mt-2 space-y-3">
+          <div className="block md:hidden mt-2 space-y-3">
             {debtorCustomers.map((cust) => {
               const paidPercentage = Math.round((cust.paidAmount / cust.totalAmount) * 100);
               const overdue = hasOverdueInvoices(cust);
@@ -425,13 +425,13 @@ export default function DebtsView({ customers, loading, onPaymentRecorded, curre
         </div>
 
         {/* Payments History Log (1 column width) */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 md:p-5 space-y-4 w-full max-w-full overflow-hidden">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 md:p-5 space-y-4">
           <div>
             <h4 className="font-bold text-slate-700 tracking-tight uppercase text-xs">Son Mədaxil Jurnalı</h4>
             <p className="text-[11px] text-slate-400">Son qəbul edilmiş ödəniş sənədləri</p>
           </div>
 
-          <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+          <div className="space-y-3 pr-1">
             {allPayments.map((pay, idx) => (
               <div key={pay.id || idx} className="bg-slate-50 p-3 rounded-lg border border-slate-150 space-y-2 relative overflow-hidden group">
                 <div className="absolute top-0 right-0 w-1 bg-emerald-500 h-full"></div>

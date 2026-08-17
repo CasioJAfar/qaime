@@ -675,7 +675,7 @@ export default function InvoicesView({
             </div>
           </div>
         )}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 md:p-5 space-y-4 md:flex-1 md:flex md:flex-col md:overflow-hidden md:min-h-[350px]">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 md:p-5 space-y-4 ">
           {/* Filter Bar */}
           <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 shrink-0">
             <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 flex-1">
@@ -765,9 +765,9 @@ export default function InvoicesView({
           </div>
 
           {/* Table Container */}
-          <div className="md:flex-1 md:overflow-y-auto">
+          <div className="">
             {/* Desktop Table View */}
-            <div className="hidden md:block">
+            <div className="overflow-x-auto hidden md:block">
               <table className="w-full text-left">
                 <thead>
                   <tr className="bg-slate-50 text-[10px] text-slate-500 uppercase tracking-[0.1em] border-b border-slate-200">
