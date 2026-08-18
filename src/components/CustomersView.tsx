@@ -78,6 +78,7 @@ export default function CustomersView({
   currency = "AZN"
 }: CustomersViewProps) {
   const [search, setSearch] = useState("");
+  const [debtStatusFilter, setDebtStatusFilter] = useState<"all" | "debtor" | "clean">("all");
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
   const savedUser = localStorage.getItem("erp_user");
   const isAdmin = savedUser ? JSON.parse(savedUser).role === "admin" : false;
@@ -285,15 +286,13 @@ export default function CustomersView({
                 <List className="w-3.5 h-3.5" />
                 <span>Siyahı</span>
               </button>
-              {API_KEY && (
-                <button 
-                  onClick={() => setViewMode("map")}
-                  className={`px-3 py-1.5 rounded text-xs font-semibold flex items-center space-x-1.5 transition ${viewMode === "map" ? "bg-white text-slate-800 shadow-xs" : "text-slate-500 hover:text-slate-700"}`}
-                >
-                  <MapIcon className="w-3.5 h-3.5" />
-                  <span>Xəritə</span>
-                </button>
-              )}
+                            <button 
+                onClick={() => setViewMode("map")}
+                className={`px-3 py-1.5 rounded text-xs font-semibold flex items-center space-x-1.5 transition ${viewMode === "map" ? "bg-white text-slate-800 shadow-xs" : "text-slate-500 hover:text-slate-700"}`}
+              >
+                <MapIcon className="w-3.5 h-3.5" />
+                <span>Xəritə</span>
+              </button>
             </div>
             <button 
               onClick={() => setShowAddModal(true)}
@@ -308,15 +307,26 @@ export default function CustomersView({
         {/* Filter and Table Card */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 md:p-5 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shrink-0">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-              <input 
-                type="text" 
-                placeholder="Müştəri adı ilə axtar..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-10 pr-4 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-indigo-500"
-              />
+            <div className="flex space-x-2 w-full max-w-xl">
+              <div className="relative flex-1">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                <input 
+                  type="text" 
+                  placeholder="Müştəri adı ilə axtar..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-10 pr-4 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-indigo-500"
+                />
+              </div>
+              <select 
+                value={debtStatusFilter}
+                onChange={e => setDebtStatusFilter(e.target.value as any)}
+                className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 outline-none focus:border-indigo-500 min-w-[150px]"
+              >
+                <option value="all">Bütün Müştərilər</option>
+                <option value="debtor">Borcu Olanlar</option>
+                <option value="clean">Borcu Olmayanlar</option>
+              </select>
             </div>
             <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
               Cəmi: <span className="font-bold text-slate-950">{filteredCustomers.length}</span> müştəri tapıldı

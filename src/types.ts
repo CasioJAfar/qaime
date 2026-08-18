@@ -24,6 +24,7 @@ export interface Customer {
   id: string;
   name: string;
   code?: string;
+  email?: string;
   createdAt: string;
   totalAmount: number;
   paidAmount: number;
@@ -33,6 +34,7 @@ export interface Customer {
   lat?: number;
   lng?: number;
   address?: string;
+  deletedAt?: string;
 }
 
 export interface Payment {

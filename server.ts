@@ -49,6 +49,10 @@ interface Customer {
   id: string;
   name: string;
   code?: string;
+  address?: string;
+  lat?: number;
+  lng?: number;
+  deletedAt?: string;
   createdAt: string;
 }
 
@@ -497,11 +501,14 @@ app.put("/api/invoices/:id", adminOrUser, async (req, res) => {
 // 4. Customers API
 app.get("/api/customers", async (req, res) => {
   const db = await readDBFromFirestore();
+  const includeDeleted = req.query.includeDeleted === 'true';
   
   // Aggregate billing details per customer
   const aggregateMap = new Map<string, { totalAmount: number; paidAmount: number; invoices: Invoice[]; payments: Payment[] }>();
   
-  db.customers.forEach(cust => {
+  const relevantCustomers = includeDeleted ? db.customers : db.customers.filter(c => !c.deletedAt);
+  
+  relevantCustomers.forEach(cust => {
     aggregateMap.set(cust.name.toLowerCase().trim(), {
       totalAmount: 0,
       paidAmount: 0,
@@ -513,7 +520,11 @@ app.get("/api/customers", async (req, res) => {
   db.invoices.forEach(inv => {
     const key = inv.customerName.toLowerCase().trim();
     if (!aggregateMap.has(key)) {
-      aggregateMap.set(key, { totalAmount: 0, paidAmount: 0, invoices: [], payments: [] });
+      if (includeDeleted || relevantCustomers.some(c => c.name.toLowerCase().trim() === key)) {
+        aggregateMap.set(key, { totalAmount: 0, paidAmount: 0, invoices: [], payments: [] });
+      } else {
+        return;
+      }
     }
     const record = aggregateMap.get(key)!;
     record.totalAmount += inv.totalAmount;
@@ -522,20 +533,18 @@ app.get("/api/customers", async (req, res) => {
 
   db.payments.forEach(pay => {
     const key = pay.customerName.toLowerCase().trim();
-    if (!aggregateMap.has(key)) {
-      aggregateMap.set(key, { totalAmount: 0, paidAmount: 0, invoices: [], payments: [] });
-    }
+    if (!aggregateMap.has(key)) return;
     const record = aggregateMap.get(key)!;
     record.paidAmount += pay.amount;
     record.payments.push(pay);
   });
 
   // Format response
-  const response = db.customers.map(cust => {
+  const response = relevantCustomers.map(cust => {
     const key = cust.name.toLowerCase().trim();
     const metrics = aggregateMap.get(key) || { totalAmount: 0, paidAmount: 0, invoices: [], payments: [] };
     const debtAmount = metrics.totalAmount - metrics.paidAmount;
-
+    
     return {
       ...cust,
       totalAmount: metrics.totalAmount,
@@ -648,9 +657,48 @@ app.delete("/api/customers/:id", adminOnly, async (req, res) => {
     return res.status(404).json({ error: "Müştəri tapılmadı." });
   }
 
+  // Soft delete
+  db.customers[index].deletedAt = new Date().toISOString();
+  const deletedCustomer = db.customers[index];
+  
+  await writeDBToFirestore(db);
+
+  await addLog("customer_deleted", `Müştəri silindi (Arxivə göndərildi): ${deletedCustomer.name}`, req);
+
+  res.json({ success: true, deletedCustomer });
+});
+
+
+// Restore customer
+app.post("/api/customers/:id/restore", adminOnly, async (req, res) => {
+  const { id } = req.params;
+  const db = await readDBFromFirestore();
+  const index = db.customers.findIndex(c => c.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: "Müştəri tapılmadı." });
+  }
+
+  delete db.customers[index].deletedAt;
+  const restoredCustomer = db.customers[index];
+  
+  await writeDBToFirestore(db);
+  await addLog("customer_restored", `Müştəri arxivdən çıxarıldı: ${restoredCustomer.name}`, req);
+
+  res.json({ success: true, restoredCustomer });
+});
+
+// Force delete customer
+app.delete("/api/customers/:id/force", adminOnly, async (req, res) => {
+  const { id } = req.params;
+  const db = await readDBFromFirestore();
+  const index = db.customers.findIndex(c => c.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: "Müştəri tapılmadı." });
+  }
+
   const deletedCustomer = db.customers.splice(index, 1)[0];
   
-  // Clean up associated invoices and payments if name matches
+  // Clean up associated invoices and payments
   db.invoices = db.invoices.filter(
     i => i.customerName.toLowerCase().trim() !== deletedCustomer.name.toLowerCase().trim()
   );
@@ -659,10 +707,9 @@ app.delete("/api/customers/:id", adminOnly, async (req, res) => {
   );
 
   await writeDBToFirestore(db);
+  await addLog("customer_force_deleted", `Müştəri tamamilə silindi: ${deletedCustomer.name}`, req);
 
-  await addLog("customer_deleted", `Müştəri silindi: ${deletedCustomer.name}`, req);
-
-  res.json({ success: true, deletedCustomer });
+  res.json({ success: true });
 });
 
 // 5. Customer Payment (Ödəniş qəbulu)
@@ -1083,6 +1130,63 @@ app.delete("/api/contacts/:id", adminOnly, async (req, res) => {
   await writeDBToFirestore(db);
   await addLog("contact_deleted", `Şəxsi müştəri silindi: ${deleted.name}`, req);
   res.json({ success: true, deleted });
+});
+
+import nodemailer from 'nodemailer';
+
+// 9. Email Notification API
+app.post("/api/send-email", adminOrUser, async (req, res) => {
+  const { to, subject, html } = req.body;
+  if (!to || !subject || !html) {
+    return res.status(400).json({ error: "Email məlumatları tam deyil." });
+  }
+
+  try {
+    let transporter;
+    
+    if (process.env.SMTP_HOST && process.env.SMTP_USER) {
+      transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: parseInt(process.env.SMTP_PORT || "587"),
+        secure: process.env.SMTP_SECURE === "true",
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS,
+        },
+      });
+    } else {
+      console.log("No SMTP credentials found. Using test Ethereal account...");
+      let testAccount = await nodemailer.createTestAccount();
+      transporter = nodemailer.createTransport({
+        host: "smtp.ethereal.email",
+        port: 587,
+        secure: false, // true for 465, false for other ports
+        auth: {
+          user: testAccount.user,
+          pass: testAccount.pass,
+        },
+      });
+    }
+
+    let info = await transporter.sendMail({
+      from: '"Qaimə ERP Sistemi" <noreply@qaime.erp>',
+      to: to,
+      subject: subject,
+      html: html,
+    });
+
+    console.log("Message sent: %s", info.messageId);
+    let previewUrl = nodemailer.getTestMessageUrl(info);
+    if (previewUrl) {
+      console.log("Preview URL: %s", previewUrl);
+    }
+
+    await addLog("email_sent", `Email göndərildi: ${to} (${subject})`, req);
+    res.json({ success: true, message: "Email uğurla göndərildi.", previewUrl });
+  } catch (err: any) {
+    console.error("Email sending error:", err);
+    res.status(500).json({ error: "Email göndərilmədi.", details: err.message });
+  }
 });
 
 // Vite integration

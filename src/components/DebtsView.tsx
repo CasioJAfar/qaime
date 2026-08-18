@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { 
+import { Mail,
   CreditCard, 
   Search, 
   Plus, 
@@ -28,6 +28,7 @@ export default function DebtsView({ customers, loading, onPaymentRecorded, curre
   const isAdmin = savedUser ? JSON.parse(savedUser).role === "admin" : false;
 
   const [search, setSearch] = useState("");
+  const [debtFilter, setDebtFilter] = useState<"all" | "high" | "low">("all");
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedCustId, setSelectedCustId] = useState("");
   const [selectedInvoiceId, setSelectedInvoiceId] = useState("");
@@ -86,6 +87,58 @@ export default function DebtsView({ customers, loading, onPaymentRecorded, curre
     }
   };
 
+  
+  const handleSendReminder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!emailModal || !emailModal.email) return;
+    
+    setEmailModal({ ...emailModal, sending: true });
+    const { customer, email } = emailModal;
+    
+    try {
+      const htmlContent = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px;">
+          <h2 style="color: #e11d48; margin-top: 0;">Borc Xatırlatması</h2>
+          <p>Hörmətli <strong>${customer.name}</strong>,</p>
+          <p>Nəzərinizə çatdırırıq ki, hesabınızda ödənilməmiş borc məbləği mövcuddur.</p>
+          
+          <div style="background-color: #fff1f2; border-left: 4px solid #e11d48; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0; font-size: 14px; color: #881337;">Qalıq Borc Məbləği:</p>
+            <p style="margin: 5px 0 0 0; font-size: 24px; font-weight: bold; font-family: monospace; color: #be123c;">
+              ${new Intl.NumberFormat('az-AZ', { minimumFractionDigits: 2 }).format(customer.debtAmount)} ₼
+            </p>
+          </div>
+          
+          <p>Zəhmət olmasa, ən qısa zamanda ödənişi təmin etməyinizi xahiş edirik.</p>
+          
+          <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: center;">
+            <p>Bu avtomatik sistem mesajıdır.</p>
+            <p>Təşəkkür edirik!</p>
+          </div>
+        </div>
+      `;
+
+      const res = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: email,
+          subject: `Borc Xatırlatması: ${customer.name}`,
+          html: htmlContent
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Xəta baş verdi');
+      
+      alert('Xatırlatma uğurla göndərildi!');
+      setEmailModal(null);
+    } catch (err: any) {
+      alert('Email göndərilmədi: ' + err.message);
+      setEmailModal({ ...emailModal, sending: false });
+    }
+  };
+
   const handlePaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCustId || !paymentAmount || isNaN(Number(paymentAmount)) || Number(paymentAmount) <= 0) {
@@ -120,6 +173,7 @@ export default function DebtsView({ customers, loading, onPaymentRecorded, curre
   };
 
   const [deletePaymentConfirmId, setDeletePaymentConfirmId] = useState<string | null>(null);
+  const [emailModal, setEmailModal] = useState<{ customer: Customer, email: string, sending: boolean } | null>(null);
 
   const handleDeletePayment = async (paymentId: string) => {
     try {
@@ -327,13 +381,22 @@ export default function DebtsView({ customers, loading, onPaymentRecorded, curre
                         </div>
                       </td>
                       <td className="px-6 py-3.5 text-right">
-                        <button 
-                           onClick={() => handleOpenPaymentModal(cust)}
-                          className="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded text-xs font-semibold transition inline-flex items-center space-x-1 cursor-pointer"
-                        >
-                          <PlusCircle className="w-3.5 h-3.5" />
-                          <span>Ödə</span>
-                        </button>
+                        <div className="flex items-center justify-end space-x-2">
+                          <button
+                            onClick={() => handleOpenPaymentModal(cust)}
+                            className="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded text-xs font-semibold transition inline-flex items-center space-x-1 cursor-pointer"
+                          >
+                            <PlusCircle className="w-3.5 h-3.5" />
+                            <span>Ödə</span>
+                          </button>
+                          <button
+                            onClick={() => setEmailModal({ customer: cust, email: '', sending: false })}
+                            className="p-1 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-600 transition cursor-pointer"
+                            title="Xatırlatma Göndər"
+                          >
+                            <Mail className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -404,13 +467,20 @@ export default function DebtsView({ customers, loading, onPaymentRecorded, curre
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center justify-end">
+                  <div className="flex items-center justify-end space-x-2">
                     <button 
                       onClick={() => handleOpenPaymentModal(cust)}
-                      className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer shadow-xs"
+                      className="flex-1 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer shadow-xs"
                     >
                       <PlusCircle className="w-3.5 h-3.5" />
                       <span>Ödəniş Qəbul Et</span>
+                    </button>
+                    <button
+                      onClick={() => setEmailModal({ customer: cust, email: '', sending: false })}
+                      className="py-2 px-3 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-600 transition cursor-pointer flex items-center justify-center"
+                      title="Xatırlatma Göndər"
+                    >
+                      <Mail className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -424,7 +494,25 @@ export default function DebtsView({ customers, loading, onPaymentRecorded, curre
           </div>
         </div>
 
-        {/* Payments History Log (1 column width) */}
+        
+        <div className="flex flex-col space-y-4 w-full">
+          {/* Compacted Metrics */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 w-full flex flex-col space-y-3">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Ümumi Faturalanan</span>
+              <span className="text-sm font-mono font-bold text-slate-800">{formatAZN(totalInvoiced)}</span>
+            </div>
+            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+              <span className="text-[10px] text-emerald-500 font-bold uppercase tracking-wider">Cəmi Mədaxil</span>
+              <span className="text-sm font-mono font-bold text-emerald-600">{formatAZN(totalCollected)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] text-rose-500 font-bold uppercase tracking-wider">Qalıq Borc</span>
+              <span className="text-sm font-mono font-bold text-rose-600">{formatAZN(totalOutstanding)}</span>
+            </div>
+          </div>
+          
+          {/* Payments History Log (1 column width) */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 md:p-5 space-y-4">
           <div>
             <h4 className="font-bold text-slate-700 tracking-tight uppercase text-xs">Son Mədaxil Jurnalı</h4>
@@ -489,6 +577,64 @@ export default function DebtsView({ customers, loading, onPaymentRecorded, curre
           </div>
         </div>
       </div>
+      </div>
+
+      
+      {/* Email Modal */}
+      {emailModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl border border-slate-200 max-w-sm w-full p-5 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center">
+                <Mail className="w-4 h-4 mr-1.5 text-indigo-600" /> Borc Xatırlatması
+              </h3>
+              <button 
+                onClick={() => setEmailModal(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <form onSubmit={handleSendReminder} className="space-y-4">
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Müştəri: {emailModal.customer.name}</label>
+                <label className="text-[10px] font-bold text-rose-500 block mb-1 uppercase tracking-wider mt-2">Qalıq Borc: {formatAZN(emailModal.customer.debtAmount)}</label>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">E-poçt Ünvanı</label>
+                <input 
+                  type="email" 
+                  required
+                  placeholder="musteri@mail.com"
+                  value={emailModal.email}
+                  onChange={e => setEmailModal({ ...emailModal, email: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-indigo-500"
+                />
+              </div>
+              <div className="pt-2 flex justify-end space-x-2 border-t border-slate-100 mt-4 pt-4">
+                <button 
+                  type="button"
+                  onClick={() => setEmailModal(null)}
+                  className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
+                >
+                  İmtina
+                </button>
+                <button 
+                  type="submit"
+                  disabled={emailModal.sending}
+                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-md flex items-center"
+                >
+                  {emailModal.sending ? (
+                    <span className="flex items-center">
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5"></div> Göndərilir...
+                    </span>
+                  ) : "Göndər"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Payment Entry Modal */}
       {showPaymentModal && (

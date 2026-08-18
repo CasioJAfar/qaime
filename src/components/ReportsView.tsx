@@ -25,6 +25,7 @@ interface ReportsViewProps {
 
 export default function ReportsView({ customers, invoices, loading, onInvoiceUpdated, showToast, currency = "AZN" }: ReportsViewProps) {
   const [reportType, setReportType] = useState<"summary" | "debtors" | "invoices">("summary");
+  const [invoiceStatusFilter, setInvoiceStatusFilter] = useState<"all" | "unpaid" | "paid">("all");
   const [dateRange, setDateRange] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -118,6 +119,8 @@ export default function ReportsView({ customers, invoices, loading, onInvoiceUpd
 
   // Filter invoices based on date range and search query
   const filteredInvoices = invoices.filter(inv => {
+    if (invoiceStatusFilter === "paid" && inv.status !== "paid") return false;
+    if (invoiceStatusFilter === "unpaid" && inv.status === "paid") return false;
     // 1. Search Query
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -276,7 +279,8 @@ export default function ReportsView({ customers, invoices, loading, onInvoiceUpd
 
           <div>
             <label className="text-[10px] font-bold text-slate-400 block mb-1.5 uppercase tracking-wider">Axtarış (Müştəri və ya Qaimə №)</label>
-            <div className="relative">
+            <div className="flex space-x-2">
+            <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
               <input 
                 type="text" 
@@ -286,6 +290,18 @@ export default function ReportsView({ customers, invoices, loading, onInvoiceUpd
                 className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-700 focus:outline-hidden focus:border-indigo-500 h-[34px]"
               />
             </div>
+            {reportType === "invoices" && (
+              <select 
+                value={invoiceStatusFilter}
+                onChange={e => setInvoiceStatusFilter(e.target.value as any)}
+                className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 outline-none focus:border-indigo-500 w-auto min-w-[140px] h-[34px]"
+              >
+                <option value="all">Bütün Qaimələr</option>
+                <option value="unpaid">Borclu (Ödənilməyib)</option>
+                <option value="paid">Ödənilmiş</option>
+              </select>
+            )}
+          </div>
           </div>
 
           <div>

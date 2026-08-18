@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { 
+import { Mail,
   Upload, 
   Plus, 
   Search, 
@@ -46,11 +46,14 @@ export default function InvoicesView({
 
   // Status Filter State (all / unpaid / paid)
   const [statusFilter, setStatusFilter] = useState<"all" | "unpaid" | "paid">("all");
+  const [filterCustomer, setFilterCustomer] = useState("all");
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
   // Custom inline deletion confirmation state
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [emailModal, setEmailModal] = useState<{ invoice: Invoice, email: string, sending: boolean } | null>(null);
 
   // Duplicate Check Custom Modal State
   const [duplicateConfirm, setDuplicateConfirm] = useState<{
@@ -88,7 +91,9 @@ export default function InvoicesView({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Filter invoices based on search terms, tab selection and date range
+  const uniqueCustomers = Array.from(new Set(invoices.map(i => i.customerName)));
   const filteredInvoices = invoices.filter(inv => {
+    if (filterCustomer !== "all" && inv.customerName !== filterCustomer) return false;
     const matchesSearch = 
       inv.customerName.toLowerCase().includes(search.toLowerCase()) ||
       inv.invoiceNumber.toLowerCase().includes(search.toLowerCase());
@@ -109,7 +114,7 @@ export default function InvoicesView({
     }
 
     return true;
-  });
+  }).sort((a, b) => new Date(b.invoiceDate).getTime() - new Date(a.invoiceDate).getTime());
 
   // Format currency
   const formatAZN = (val: number) => {
@@ -117,6 +122,71 @@ export default function InvoicesView({
   };
 
   const [payingInvoiceId, setPayingInvoiceId] = useState<string | null>(null);
+
+  
+  const handleSendEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!emailModal || !emailModal.email) return;
+    
+    setEmailModal({ ...emailModal, sending: true });
+    
+    const { invoice, email } = emailModal;
+    
+    try {
+      const htmlContent = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px;">
+          <h2 style="color: #4f46e5; margin-top: 0;">${invoice.invoiceNumber} Nömrəli Qaimə</h2>
+          <p>Hörmətli <strong>${invoice.customerName}</strong>,</p>
+          <p>Sizin üçün yeni qaimə sənədi formalaşdırılmışdır. Detallar aşağıdadır:</p>
+          
+          <table style="width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px;">
+            <tr style="background-color: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+              <td style="padding: 10px; font-weight: bold; width: 40%;">Tarix</td>
+              <td style="padding: 10px;">${invoice.invoiceDate}</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #e2e8f0;">
+              <td style="padding: 10px; font-weight: bold;">Məhsul/Xidmət Sayı</td>
+              <td style="padding: 10px;">${invoice.items.length}</td>
+            </tr>
+            <tr style="background-color: #f0fdf4; border-bottom: 1px solid #e2e8f0;">
+              <td style="padding: 10px; font-weight: bold; color: #166534;">Yekun Məbləğ</td>
+              <td style="padding: 10px; font-weight: bold; font-family: monospace; font-size: 16px; color: #166534;">${new Intl.NumberFormat('az-AZ', { minimumFractionDigits: 2 }).format(invoice.totalAmount)} ₼</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #e2e8f0;">
+              <td style="padding: 10px; font-weight: bold;">Status</td>
+              <td style="padding: 10px; font-weight: bold; color: ${invoice.status === 'paid' ? '#16a34a' : '#d97706'}">
+                ${invoice.status === 'paid' ? 'Ödənilib' : 'Ödəniş Gözləyir'}
+              </td>
+            </tr>
+          </table>
+          
+          <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: center;">
+            <p>Bu avtomatik sistem mesajıdır.</p>
+            <p>Təşəkkür edirik!</p>
+          </div>
+        </div>
+      `;
+
+      const res = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: email,
+          subject: `Yeni Qaimə: ${invoice.invoiceNumber}`,
+          html: htmlContent
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Xəta baş verdi');
+      
+      alert('Email uğurla göndərildi!');
+      setEmailModal(null);
+    } catch (err: any) {
+      alert('Email göndərilmədi: ' + err.message);
+      setEmailModal({ ...emailModal, sending: false });
+    }
+  };
 
   const handlePayInvoice = async (invoice: Invoice) => {
     if (!invoice) return;
@@ -678,6 +748,16 @@ export default function InvoicesView({
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 md:p-5 space-y-4 ">
           {/* Filter Bar */}
           <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 shrink-0">
+            <div className="flex items-center space-x-2 overflow-x-auto pb-1 xl:pb-0">
+              <select value={filterCustomer} onChange={e => setFilterCustomer(e.target.value)} className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 outline-none focus:border-indigo-500 min-w-[120px]">
+                <option value="all">Bütün Müştərilər</option>
+                {uniqueCustomers.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <div className="flex items-center bg-slate-200/60 p-1 rounded-lg">
+                <button onClick={() => setViewMode("list")} className={`px-2 py-1 rounded text-xs font-semibold flex items-center transition ${viewMode === "list" ? "bg-white text-slate-800 shadow-xs" : "text-slate-500 hover:text-slate-700"}`}>Siyahı</button>
+                <button onClick={() => setViewMode("grid")} className={`px-2 py-1 rounded text-xs font-semibold flex items-center transition ${viewMode === "grid" ? "bg-white text-slate-800 shadow-xs" : "text-slate-500 hover:text-slate-700"}`}>Şəbəkə</button>
+              </div>
+            </div>
             <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 flex-1">
               <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
@@ -767,7 +847,7 @@ export default function InvoicesView({
           {/* Table Container */}
           <div className="">
             {/* Desktop Table View */}
-            <div className="overflow-x-auto hidden md:block">
+            <div className={viewMode === "list" ? "overflow-x-auto hidden md:block" : "hidden"}>
               <table className="w-full text-left">
                 <thead>
                   <tr className="bg-slate-50 text-[10px] text-slate-500 uppercase tracking-[0.1em] border-b border-slate-200">
@@ -876,7 +956,7 @@ export default function InvoicesView({
             </div>
 
             {/* Mobile Cards View (Fits perfectly, no horizontal scrolling) */}
-            <div className="block md:hidden space-y-3">
+            <div className={viewMode === "grid" ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" : "block md:hidden space-y-3"}>
               {filteredInvoices.map((inv) => (
                 <div 
                   key={inv.id}
@@ -962,12 +1042,24 @@ export default function InvoicesView({
                           <span>PDF</span>
                         </button>
                         {isAdmin && (
+                          <>
                           <button 
                             onClick={() => setDeleteConfirmId(inv.id)}
                             className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 transition cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEmailModal({ invoice: inv, email: '', sending: false });
+                            }}
+                            className="p-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-600 transition cursor-pointer"
+                            title="E-poçtla Göndər"
+                          >
+                            <Mail className="w-3.5 h-3.5" />
+                          </button>
+                          </>
                         )}
                       </>
                     )}
