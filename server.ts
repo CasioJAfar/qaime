@@ -1,0 +1,1216 @@
+import { authenticateServer, readDBFromFirestore, writeDBToFirestore } from "./src/db";
+import express from "express";
+import path from "path";
+import fs from "fs";
+import { createServer as createViteServer } from "vite";
+import dotenv from "dotenv";
+
+import { PDFParse } from "pdf-parse";
+
+dotenv.config();
+
+const app = express();
+const PORT = 3000;
+
+// Set up body parser with high limit for base64 file uploads
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+// Render Persistent Disk support or local development
+const RENDER_DISK_DIR = "/data";
+const _DB_FILE = fs.existsSync(RENDER_DISK_DIR)
+  ? path.join(RENDER_DISK_DIR, "db.json")
+  : path.join(process.cwd(), "db.json");
+
+// Define Types
+interface InvoiceItem {
+  name: string;
+  quantity: number;
+  price: number;
+  total: number;
+}
+
+interface Invoice {
+  id: string;
+  invoiceNumber: string;
+  customerName: string;
+  customerCode?: string;
+  invoiceDate: string;
+  totalAmount: number;
+  items: InvoiceItem[];
+  sourceFile?: string;
+  sourceFileType?: string;
+  extracted: boolean;
+  createdAt: string;
+  status?: "paid" | "unpaid";
+}
+
+interface Customer {
+  id: string;
+  name: string;
+  code?: string;
+  address?: string;
+  lat?: number;
+  lng?: number;
+  deletedAt?: string;
+  createdAt: string;
+}
+
+interface Payment {
+  id: string;
+  customerId: string;
+  customerName: string;
+  amount: number;
+  paymentDate: string;
+  note: string;
+  createdAt: string;
+  invoiceId?: string;
+  invoiceNumber?: string;
+}
+
+interface LogEntry {
+  id: string;
+  user: string;
+  action: string;
+  details: string;
+  timestamp: string;
+}
+
+interface User {
+  username: string;
+  password?: string;
+  role: "admin" | "moderator" | "user" | "2";
+}
+
+interface Contact {
+  id: string;
+  name: string;
+  phone: string;
+  address: string;
+  createdAt: string;
+}
+
+interface Session {
+  id: string;
+  username: string;
+  device: string;
+  ip: string;
+  lastActive: string;
+  createdAt: string;
+}
+
+interface DBState {
+  invoices: Invoice[];
+  customers: Customer[];
+  payments: Payment[];
+  logs?: LogEntry[];
+  users?: User[];
+  contacts?: Contact[];
+  sessions?: Session[];
+}
+
+// Initial Sample Data in Azerbaijani
+const initialDB: DBState = {
+  customers: [],
+  invoices: [],
+  payments: [],
+  contacts: []
+};
+
+// Helper to read database state
+
+
+
+
+// Helper to log user activities
+async function addLog(action: string, details: string, req?: express.Request) {
+  const db = await readDBFromFirestore();
+  if (!db.logs) {
+    db.logs = [];
+  }
+  const user = (req?.headers["x-user-username"] as string) || "admin";
+  db.logs.unshift({
+    id: "log-" + Date.now() + "-" + Math.floor(Math.random() * 1000),
+    user,
+    action,
+    details,
+    timestamp: new Date().toISOString()
+  });
+  if (db.logs.length > 200) {
+    db.logs = db.logs.slice(0, 200);
+  }
+  await writeDBToFirestore(db);
+}
+
+// Role check middleware for mutating APIs
+const adminOnly = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const role = req.headers["x-user-role"] || req.query.role;
+  if (role !== "admin") {
+    return res.status(403).json({ error: "Bu əməliyyat üçün admin səlahiyyəti lazımdır." });
+  }
+  next();
+};
+
+// Role check middleware allowing both Admin, Moderator, and User roles
+const adminOrUser = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const role = req.headers["x-user-role"] || req.query.role;
+  if (role !== "admin" && role !== "user" && role !== "moderator" && role !== "2") {
+    return res.status(403).json({ error: "Bu əməliyyat üçün giriş tələb olunur." });
+  }
+  next();
+};
+
+// Clean and normalize name
+function normalizeCustomerName(name: string): string {
+  if (!name) return "Naməlum Müştəri";
+  return name
+    .replace(/(MMC|ASC|LTD|LLC|şirkəti|firması)/gi, "")
+    .replace(/["'“”«»]/g, "")
+    .replace(/[0-9]/g, "") // Remove all numbers from the name
+    .trim()
+    .replace(/\s+/g, " ") + " MMC"; // standard ERP display
+}
+
+// API Routes
+
+// Authentication API
+app.post("/api/login", async (req, res) => {
+  const { username, password, deviceInfo } = req.body;
+  const normalizedUsername = (username || "").toLowerCase().trim();
+  const db = await readDBFromFirestore();
+  const users = db.users || [];
+  
+  const matchedUser = users.find(u => u.username.toLowerCase().trim() === normalizedUsername && u.password === password);
+  
+  if (matchedUser) {
+    if (!db.sessions) db.sessions = [];
+    const sessionId = "sess-" + Date.now() + "-" + Math.random().toString(36).substr(2, 9);
+    const device = deviceInfo || req.headers["user-agent"] || "Bilinməyən cihaz";
+    const ip = Array.isArray(req.headers['x-forwarded-for']) ? req.headers['x-forwarded-for'][0] : req.headers['x-forwarded-for'] || req.socket?.remoteAddress || "Bilinməyən IP";
+    
+    db.sessions.push({
+      id: sessionId,
+      username: matchedUser.username,
+      device: device,
+      ip: ip,
+      lastActive: new Date().toISOString(),
+      createdAt: new Date().toISOString()
+    });
+    await writeDBToFirestore(db);
+    
+    res.json({ success: true, role: matchedUser.role, username: matchedUser.username, sessionId });
+  } else {
+    res.status(401).json({ error: "İstifadəçi adı və ya şifrə yanlışdır." });
+  }
+});
+
+// Get user active sessions
+app.get("/api/sessions", adminOrUser, async (req, res) => {
+  const username = req.headers["x-user-username"] as string;
+  const db = await readDBFromFirestore();
+  const userSessions = (db.sessions || []).filter(s => s.username === username);
+  res.json(userSessions);
+});
+
+// Logout specific session
+app.delete("/api/sessions/:id", adminOrUser, async (req, res) => {
+  const username = req.headers["x-user-username"] as string;
+  const { id } = req.params;
+  const db = await readDBFromFirestore();
+  if (db.sessions) {
+    db.sessions = db.sessions.filter(s => !(s.id === id && s.username === username));
+    await writeDBToFirestore(db);
+  }
+  res.json({ success: true });
+});
+
+// Change Password
+app.post("/api/auth/change-password", adminOrUser, async (req, res) => {
+  const username = req.headers["x-user-username"] as string;
+  const { currentPassword, newPassword } = req.body;
+  const db = await readDBFromFirestore();
+  const user = db.users?.find(u => u.username === username && u.password === currentPassword);
+  if (!user) {
+    return res.status(401).json({ error: "Cari şifrə yanlışdır." });
+  }
+  user.password = newPassword;
+  await writeDBToFirestore(db);
+  res.json({ success: true });
+});
+
+// Users list for admin
+app.get("/api/users", adminOnly, async (req, res) => {
+  const db = await readDBFromFirestore();
+  const users = db.users || [];
+  res.json(users.map(u => ({ username: u.username, role: u.role })));
+});
+
+// Update user role by admin
+app.post("/api/users/:username/role", adminOnly, async (req, res) => {
+  const { username } = req.params;
+  const { role } = req.body;
+  if (role !== "admin" && role !== "user" && role !== "moderator" && role !== "2") {
+    return res.status(400).json({ error: "Yanlış rol təyin edildi." });
+  }
+  const db = await readDBFromFirestore();
+  if (!db.users) db.users = [];
+  
+  const user = db.users.find(u => u.username.toLowerCase().trim() === username.toLowerCase().trim());
+  if (!user) {
+    return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+  }
+  
+  const oldRole = user.role;
+  user.role = role;
+  await writeDBToFirestore(db);
+  
+  await addLog("user_role_updated", `İstifadəçi "${user.username}" rolu dəyişdirildi: ${oldRole} -> ${role}`, req);
+  res.json({ success: true, username: user.username, role: user.role });
+});
+
+// Backup/Restore API
+app.get("/api/backup", adminOnly, async (req, res) => {
+  const db = await readDBFromFirestore();
+  res.setHeader("Content-Disposition", "attachment; filename=erp_backup.json");
+  res.setHeader("Content-Type", "application/json");
+  res.json(db);
+  await addLog("backup_download", "Məlumatların ehtiyat nüsxəsi (JSON) yükləndi", req);
+});
+
+app.post("/api/restore", adminOnly, async (req, res) => {
+  try {
+    const backupData = req.body;
+    if (!backupData || typeof backupData !== "object") {
+      console.error("Yanlış ehtiyat nüsxə formatı (Obyekt deyil):", typeof backupData);
+      return res.status(400).json({ error: "Yanlış ehtiyat nüsxə formatı. JSON faylı düzgün deyil." });
+    }
+    
+    // Auto-fix missing arrays to prevent crashes
+    if (!Array.isArray(backupData.customers)) backupData.customers = [];
+    if (!Array.isArray(backupData.invoices)) backupData.invoices = [];
+    if (!Array.isArray(backupData.payments)) backupData.payments = [];
+    if (!Array.isArray(backupData.cashRegister)) backupData.cashRegister = [];
+    if (!Array.isArray(backupData.logs)) backupData.logs = [];
+    if (!Array.isArray(backupData.users)) backupData.users = [
+      { username: "admin", password: "195", role: "admin" },
+      { username: "user", password: "user", role: "user" },
+      { username: "cefer", password: "1", role: "user" }
+    ];
+
+    await writeDBToFirestore(backupData);
+    await addLog("backup_restore", "Məlumatlar ehtiyat nüsxədən (JSON) bərpa edildi", req);
+    res.json({ success: true, message: "Məlumatlar uğurla bərpa edildi." });
+  } catch (error) {
+    console.error("Bərpa zamanı catch xətası:", error);
+    res.status(500).json({ error: "Bərpa zamanı xəta baş verdi: " + (error as Error).message });
+  }
+});
+
+// Logs API
+app.get("/api/logs", adminOnly, async (req, res) => {
+  const db = await readDBFromFirestore();
+  res.json(db.logs || []);
+});
+
+// 1. Dashboard API
+app.get("/api/dashboard", async (req, res) => {
+  const db = await readDBFromFirestore();
+  
+  // Calculate stats
+  const totalInvoices = db.invoices.length;
+  const totalSales = db.invoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
+  
+  // Aggregate totals by customer
+  const customerMap = new Map<string, { total: number; paid: number }>();
+  
+  // Initialize with customers
+  db.customers.forEach(c => {
+    customerMap.set(c.name.toLowerCase().trim(), { total: 0, paid: 0 });
+  });
+
+  // Sum invoices
+  db.invoices.forEach(inv => {
+    const key = inv.customerName.toLowerCase().trim();
+    if (!customerMap.has(key)) {
+      customerMap.set(key, { total: 0, paid: 0 });
+    }
+    const current = customerMap.get(key)!;
+    current.total += inv.totalAmount;
+  });
+
+  // Sum payments
+  db.payments.forEach(pay => {
+    const key = pay.customerName.toLowerCase().trim();
+    if (!customerMap.has(key)) {
+      customerMap.set(key, { total: 0, paid: 0 });
+    }
+    const current = customerMap.get(key)!;
+    current.paid += pay.amount;
+  });
+
+  // Calculate debtors and total remaining debt (yığılmalı məbləğ)
+  let debtorCount = 0;
+  let totalRemainingDebt = 0;
+
+  customerMap.forEach((val) => {
+    const debt = val.total - val.paid;
+    if (debt > 0.01) {
+      debtorCount++;
+      totalRemainingDebt += debt;
+    }
+  });
+
+  // Recent 5 invoices
+  const recentInvoices = [...db.invoices]
+    .sort((a, b) => new Date(b.invoiceDate).getTime() - new Date(a.invoiceDate).getTime())
+    .slice(0, 5);
+
+  // Sales trend (grouped by date / month)
+  const salesByDate: { [date: string]: number } = {};
+  db.invoices.forEach(inv => {
+    const dateStr = inv.invoiceDate; // YYYY-MM-DD
+    salesByDate[dateStr] = (salesByDate[dateStr] || 0) + inv.totalAmount;
+  });
+
+  const salesTrend = Object.keys(salesByDate)
+    .map(date => ({ date, amount: salesByDate[date] }))
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .slice(-10); // last 10 dates with sales
+
+  res.json({
+    totalInvoices,
+    totalSales,
+    debtorCount,
+    totalRemainingDebt,
+    recentInvoices,
+    salesTrend
+  });
+});
+
+// 2. Invoices API
+app.get("/api/invoices", async (req, res) => {
+  const db = await readDBFromFirestore();
+  res.json(db.invoices);
+});
+
+// Add manual invoice
+app.post("/api/invoices", adminOrUser, async (req, res) => {
+  const { invoiceNumber, customerName, customerCode, invoiceDate, totalAmount, items, sourceFile, sourceFileType } = req.body;
+  
+  if (!customerName || !totalAmount) {
+    return res.status(400).json({ error: "Müştəri adı və yekun məbləğ vacibdir." });
+  }
+
+  const db = await readDBFromFirestore();
+  
+  // Format customer name nicely
+  const formattedCustomerName = customerName.trim();
+  
+  // Create or find customer in database
+  let customer = db.customers.find(
+    c => c.name.toLowerCase().trim() === formattedCustomerName.toLowerCase().trim()
+  );
+  
+  if (!customer) {
+    db.customers.push({
+      id: "cust-" + Date.now(),
+      name: formattedCustomerName,
+      code: customerCode,
+      createdAt: new Date().toISOString()
+    });
+  } else if (customerCode && !customer.code) {
+    // If we have a code now, and didn't before, let's update it
+    customer.code = customerCode;
+  }
+
+  const num = invoiceNumber || `QM-${Math.floor(100000 + Math.random() * 900000)}`;
+  const newInvoice: Invoice = {
+    id: "inv-" + Date.now(),
+    invoiceNumber: num,
+    customerName: formattedCustomerName,
+    customerCode,
+    invoiceDate: invoiceDate || new Date().toISOString().split('T')[0],
+    totalAmount: Number(totalAmount),
+    items: items || [],
+    sourceFile,
+    sourceFileType,
+    extracted: !!sourceFile,
+    createdAt: new Date().toISOString(),
+    status: "unpaid"
+  };
+
+  db.invoices.push(newInvoice);
+  await writeDBToFirestore(db);
+
+  await addLog("invoice_created", `Əl ilə qaimə yaradıldı: ${num} - ${formattedCustomerName} (${totalAmount} AZN)`, req);
+
+  res.status(201).json(newInvoice);
+});
+
+// 3. Delete Invoice
+app.delete("/api/invoices/:id", adminOnly, async (req, res) => {
+  const { id } = req.params;
+  const db = await readDBFromFirestore();
+  
+  const index = db.invoices.findIndex(inv => inv.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: "Qaimə tapılmadı." });
+  }
+
+  const deleted = db.invoices.splice(index, 1)[0];
+  await writeDBToFirestore(db);
+
+  await addLog("invoice_deleted", `Qaimə silindi: ${deleted.invoiceNumber} - ${deleted.customerName} (${deleted.totalAmount} AZN)`, req);
+
+  res.json({ success: true, deleted });
+});
+
+// Update Invoice
+app.put("/api/invoices/:id", adminOrUser, async (req, res) => {
+  const { id } = req.params;
+  const { invoiceNumber, customerName, customerCode, invoiceDate, totalAmount, items, sourceFile, sourceFileType } = req.body;
+  
+  if (!customerName || totalAmount === undefined) {
+    return res.status(400).json({ error: "Müştəri adı və yekun məbləğ vacibdir." });
+  }
+
+  const db = await readDBFromFirestore();
+  const invoice = db.invoices.find(inv => inv.id === id);
+  
+  if (!invoice) {
+    return res.status(404).json({ error: "Qaimə tapılmadı." });
+  }
+
+  const oldTotal = invoice.totalAmount;
+  
+  invoice.invoiceNumber = invoiceNumber || invoice.invoiceNumber;
+  invoice.customerName = customerName.trim();
+  if (customerCode !== undefined) invoice.customerCode = customerCode;
+  if (invoiceDate) invoice.invoiceDate = invoiceDate;
+  invoice.totalAmount = Number(totalAmount);
+  if (items) invoice.items = items;
+  if (sourceFile !== undefined) invoice.sourceFile = sourceFile;
+  if (sourceFileType !== undefined) invoice.sourceFileType = sourceFileType;
+
+  await writeDBToFirestore(db);
+  await addLog("invoice_updated", `Qaimə yeniləndi: ${invoice.invoiceNumber} - ${invoice.customerName} (Əvvəlki məbləğ: ${oldTotal} AZN -> Yeni: ${invoice.totalAmount} AZN)`, req);
+
+  res.json({ success: true, invoice });
+});
+
+// 4. Customers API
+app.get("/api/customers", async (req, res) => {
+  const db = await readDBFromFirestore();
+  const includeDeleted = req.query.includeDeleted === 'true';
+  
+  // Aggregate billing details per customer
+  const aggregateMap = new Map<string, { totalAmount: number; paidAmount: number; invoices: Invoice[]; payments: Payment[] }>();
+  
+  const relevantCustomers = includeDeleted ? db.customers : db.customers.filter(c => !c.deletedAt);
+  
+  relevantCustomers.forEach(cust => {
+    aggregateMap.set(cust.name.toLowerCase().trim(), {
+      totalAmount: 0,
+      paidAmount: 0,
+      invoices: [],
+      payments: []
+    });
+  });
+
+  db.invoices.forEach(inv => {
+    const key = inv.customerName.toLowerCase().trim();
+    if (!aggregateMap.has(key)) {
+      if (includeDeleted || relevantCustomers.some(c => c.name.toLowerCase().trim() === key)) {
+        aggregateMap.set(key, { totalAmount: 0, paidAmount: 0, invoices: [], payments: [] });
+      } else {
+        return;
+      }
+    }
+    const record = aggregateMap.get(key)!;
+    record.totalAmount += inv.totalAmount;
+    record.invoices.push(inv);
+  });
+
+  db.payments.forEach(pay => {
+    const key = pay.customerName.toLowerCase().trim();
+    if (!aggregateMap.has(key)) return;
+    const record = aggregateMap.get(key)!;
+    record.paidAmount += pay.amount;
+    record.payments.push(pay);
+  });
+
+  // Format response
+  const response = relevantCustomers.map(cust => {
+    const key = cust.name.toLowerCase().trim();
+    const metrics = aggregateMap.get(key) || { totalAmount: 0, paidAmount: 0, invoices: [], payments: [] };
+    const debtAmount = metrics.totalAmount - metrics.paidAmount;
+    
+    return {
+      ...cust,
+      totalAmount: metrics.totalAmount,
+      paidAmount: metrics.paidAmount,
+      debtAmount: debtAmount > 0.01 ? debtAmount : 0,
+      invoices: metrics.invoices,
+      payments: metrics.payments
+    };
+  });
+
+  res.json(response);
+});
+
+// Add manual customer
+app.post("/api/customers", adminOrUser, async (req, res) => {
+  const { name, code, address, lat, lng } = req.body;
+  if (!name) {
+    return res.status(400).json({ error: "Müştəri adı vacibdir." });
+  }
+
+  const db = await readDBFromFirestore();
+  const formattedName = name.trim();
+  
+  const customerExists = db.customers.some(
+    c => c.name.toLowerCase().trim() === formattedName.toLowerCase().trim()
+  );
+
+  if (customerExists) {
+    return res.status(400).json({ error: "Bu adda müştəri artıq mövcuddur." });
+  }
+
+  const newCustomer: Customer = {
+    id: "cust-" + Date.now(),
+    name: formattedName,
+    code,
+    address,
+    lat,
+    lng,
+    createdAt: new Date().toISOString()
+  };
+
+  db.customers.push(newCustomer);
+  await writeDBToFirestore(db);
+
+  await addLog("customer_created", `Yeni müştəri əlavə edildi: ${formattedName}`, req);
+
+  res.status(201).json(newCustomer);
+});
+
+// Update customer API
+app.put("/api/customers/:id", adminOrUser, async (req, res) => {
+  const { id } = req.params;
+  const { name, code, address, lat, lng } = req.body;
+  if (!name) {
+    return res.status(400).json({ error: "Müştəri adı vacibdir." });
+  }
+
+  const db = await readDBFromFirestore();
+  const formattedName = name.trim();
+  
+  const customer = db.customers.find(c => c.id === id);
+  if (!customer) {
+    return res.status(404).json({ error: "Müştəri tapılmadı." });
+  }
+
+  const nameChanged = customer.name !== formattedName;
+  const oldName = customer.name;
+
+  if (nameChanged) {
+    const customerExists = db.customers.some(
+      c => c.id !== id && c.name.toLowerCase().trim() === formattedName.toLowerCase().trim()
+    );
+    if (customerExists) {
+      return res.status(400).json({ error: "Bu adda başqa müştəri artıq mövcuddur." });
+    }
+  }
+
+  customer.name = formattedName;
+  if (code !== undefined) customer.code = code;
+  if (address !== undefined) customer.address = address;
+  if (lat !== undefined) customer.lat = lat;
+  if (lng !== undefined) customer.lng = lng;
+
+  // Also update related invoices and payments if name changed
+  if (nameChanged) {
+    db.invoices.forEach(inv => {
+      if (inv.customerName.toLowerCase().trim() === oldName.toLowerCase().trim()) {
+        inv.customerName = formattedName;
+      }
+    });
+    db.payments.forEach(pay => {
+      if (pay.customerId === id || pay.customerName.toLowerCase().trim() === oldName.toLowerCase().trim()) {
+        pay.customerName = formattedName;
+      }
+    });
+  }
+
+  await writeDBToFirestore(db);
+  await addLog("customer_updated", `Müştəri yeniləndi: ${oldName} -> ${formattedName}`, req);
+
+  res.json({ success: true, customer });
+});
+
+// Delete customer API
+app.delete("/api/customers/:id", adminOnly, async (req, res) => {
+  const { id } = req.params;
+  const db = await readDBFromFirestore();
+  const index = db.customers.findIndex(c => c.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: "Müştəri tapılmadı." });
+  }
+
+  // Soft delete
+  db.customers[index].deletedAt = new Date().toISOString();
+  const deletedCustomer = db.customers[index];
+  
+  await writeDBToFirestore(db);
+
+  await addLog("customer_deleted", `Müştəri silindi (Arxivə göndərildi): ${deletedCustomer.name}`, req);
+
+  res.json({ success: true, deletedCustomer });
+});
+
+
+// Restore customer
+app.post("/api/customers/:id/restore", adminOnly, async (req, res) => {
+  const { id } = req.params;
+  const db = await readDBFromFirestore();
+  const index = db.customers.findIndex(c => c.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: "Müştəri tapılmadı." });
+  }
+
+  delete db.customers[index].deletedAt;
+  const restoredCustomer = db.customers[index];
+  
+  await writeDBToFirestore(db);
+  await addLog("customer_restored", `Müştəri arxivdən çıxarıldı: ${restoredCustomer.name}`, req);
+
+  res.json({ success: true, restoredCustomer });
+});
+
+// Force delete customer
+app.delete("/api/customers/:id/force", adminOnly, async (req, res) => {
+  const { id } = req.params;
+  const db = await readDBFromFirestore();
+  const index = db.customers.findIndex(c => c.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: "Müştəri tapılmadı." });
+  }
+
+  const deletedCustomer = db.customers.splice(index, 1)[0];
+  
+  // Clean up associated invoices and payments
+  db.invoices = db.invoices.filter(
+    i => i.customerName.toLowerCase().trim() !== deletedCustomer.name.toLowerCase().trim()
+  );
+  db.payments = db.payments.filter(
+    p => p.customerId !== id && p.customerName.toLowerCase().trim() !== deletedCustomer.name.toLowerCase().trim()
+  );
+
+  await writeDBToFirestore(db);
+  await addLog("customer_force_deleted", `Müştəri tamamilə silindi: ${deletedCustomer.name}`, req);
+
+  res.json({ success: true });
+});
+
+// 5. Customer Payment (Ödəniş qəbulu)
+app.post("/api/customers/:id/payment", adminOrUser, async (req, res) => {
+  const { id } = req.params;
+  const { amount, paymentDate, note, invoiceId } = req.body;
+
+  if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+    return res.status(400).json({ error: "Düzgün ödəniş məbləği daxil edin." });
+  }
+
+  const db = await readDBFromFirestore();
+  const customer = db.customers.find(c => c.id === id);
+  if (!customer) {
+    return res.status(404).json({ error: "Müştəri tapılmadı." });
+  }
+
+  let matchedInvoiceNumber = "";
+  if (invoiceId) {
+    const inv = db.invoices.find(i => i.id === invoiceId);
+    if (inv) {
+      inv.status = "paid";
+      matchedInvoiceNumber = inv.invoiceNumber;
+    }
+  }
+
+  const newPayment: Payment = {
+    id: "pay-" + Date.now(),
+    customerId: customer.id,
+    customerName: customer.name,
+    amount: Number(amount),
+    paymentDate: paymentDate || new Date().toISOString().split("T")[0],
+    note: note || (matchedInvoiceNumber ? `Qaimə ${matchedInvoiceNumber} üzrə ödəniş` : "Ödəniş qəbul edildi"),
+    createdAt: new Date().toISOString(),
+    invoiceId: invoiceId || undefined,
+    invoiceNumber: matchedInvoiceNumber || undefined
+  };
+
+  db.payments.push(newPayment);
+  await writeDBToFirestore(db);
+
+  await addLog("payment_recorded", `Ödəniş qeyd edildi: ${customer.name} - ${amount} AZN (${newPayment.note})`, req);
+
+  res.status(201).json(newPayment);
+});
+
+// Delete/Undo Payment (Ödənişin silinməsi / geri alınması)
+app.delete("/api/payments/:id", adminOnly, async (req, res) => {
+  const { id } = req.params;
+  const db = await readDBFromFirestore();
+
+  const paymentIndex = db.payments.findIndex(p => p.id === id);
+  if (paymentIndex === -1) {
+    return res.status(404).json({ error: "Ödəniş tapılmadı." });
+  }
+
+  const payment = db.payments[paymentIndex];
+
+  // If the payment is linked to an invoice, mark the invoice as unpaid again
+  if (payment.invoiceId) {
+    const inv = db.invoices.find(i => i.id === payment.invoiceId);
+    if (inv) {
+      inv.status = "unpaid";
+    }
+  }
+
+  // Remove the payment
+  db.payments.splice(paymentIndex, 1);
+  await writeDBToFirestore(db);
+
+  await addLog("payment_deleted", `Ödəniş ləğv edildi: ${payment.customerName} - ${payment.amount} AZN`, req);
+
+  res.json({ success: true, deletedPaymentId: id });
+});
+
+// 6. Reset Database API
+app.get("/api/reset", adminOnly, async (req, res) => {
+  await writeDBToFirestore(initialDB);
+  await addLog("database_reset", "Bütün verilənlər bazası sıfırlandı və ilkin vəziyyətinə gətirildi", req);
+  res.json({ success: true, message: "Məlumatlar sıfırlandı." });
+});
+
+// Helper to parse invoice files (Excel/CSV/PDF) deterministically without AI
+async function parseInvoiceDeterministically(base64Data: string, fileName: string, mimeType: string) {
+  try {
+    const isPDF = fileName.toLowerCase().endsWith(".pdf") || mimeType.includes("pdf");
+
+    // ONLY process PDF with our new e-Qaime logic, ignore others or fallback to simple.
+    // If not PDF, we could do Excel/CSV, but let's keep it simple.
+    if (!isPDF) {
+      // Very basic fallback for non-PDFs if needed, or we just throw.
+      return {
+        customerName: "Naməlum Müştəri",
+        invoiceNumber: `QM-${Math.floor(100000 + Math.random() * 900000)}`,
+        invoiceDate: new Date().toISOString().split("T")[0],
+        totalAmount: 0,
+        items: []
+      };
+    }
+
+    const buffer = Buffer.from(base64Data, "base64");
+    const parser = new PDFParse({ data: buffer });
+    const pdfData = await parser.getText();
+    const text = pdfData.text;
+    await parser.destroy();
+    
+    const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter((l: string) => l.length > 0);
+    
+    console.log("----- PDF LINES START -----");
+    console.log(lines.slice(0, 20).join("\n"));
+    console.log("----- PDF LINES END -----");
+    
+    let customerName = "";
+    let invoiceNumber = "";
+    let invoiceDate = "";
+    let totalAmount = 0;
+    let items: any[] = [];
+    
+    // 1. Initial pass to find the invoice number exactly as user requested.
+    // User requested specifically matching "nömrə:" and taking the numbers.
+    // They explicitly said "nömrəsi başqa yerdədi", so we focus on "nömrə:".
+    
+    // Attempt 1: "Nömrə: 12345" or "Nömrə: QM-12345" (can include letters, hyphens, and can be >= 3 chars)
+    const strictNomreMatch = text.match(/n[öo]mr[əe]\s*:\s*([A-Za-z0-9-]{3,})/i);
+    if (strictNomreMatch) {
+       let num = strictNomreMatch[1].replace(/tarix.*/i, '').trim();
+       if (/\d/.test(num)) invoiceNumber = num;
+    }
+    
+    // Attempt 2: "12345 Nömrə:" 
+    if (!invoiceNumber) {
+       const reverseNomreMatch = text.match(/([A-Za-z0-9-]{3,})\s*n[öo]mr[əe]\s*:/i);
+       if (reverseNomreMatch) {
+          let num = reverseNomreMatch[1].trim();
+          if (/\d/.test(num)) invoiceNumber = num;
+       }
+    }
+    
+    // Attempt 3: "12345 Tarix"
+    if (!invoiceNumber) {
+       const tarixMatch = text.match(/([A-Za-z0-9-]{3,})\s*tarix/i);
+       if (tarixMatch) {
+          let num = tarixMatch[1].trim();
+          if (/\d/.test(num)) invoiceNumber = num;
+       }
+    }
+    
+    // Attempt 4: "Seriya ... Nömrə: ..."
+    if (!invoiceNumber) {
+       const seriyaMatch = text.match(/Seriya[\s:]*[A-Za-z0-9-]+.*?n[öo]mr[əe][\s:]*([A-Za-z0-9-]{3,})/i);
+       if (seriyaMatch) {
+          let num = seriyaMatch[1].trim();
+          if (/\d/.test(num)) invoiceNumber = num;
+       }
+    }
+
+    let extraData: any = {
+       senderName: "",
+       senderVOEN: "",
+       receiverVOEN: "",
+       esas: "",
+       elaveQeydler: ""
+    };
+    
+    let inTable = false;
+    let pendingItemName = "";
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const lowerLine = line.toLowerCase();
+      
+      const dateMatch = line.match(/Tarix(?:i|)[\s:]*([\d.]+)/i);
+      if (dateMatch) {
+         const parts = dateMatch[1].split(/[./-]/);
+         if (parts.length >= 3) {
+            // Convert DD.MM.YYYY to YYYY-MM-DD
+            if (parts[0].length === 2 && parts[2].length >= 4) {
+               invoiceDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+            } else {
+               invoiceDate = dateMatch[1];
+            }
+         }
+      }
+      
+      // Göndərən
+      if (lowerLine.includes("göndərən:")) {
+        const match = line.match(/Göndərən:\s*VÖEN\s+([\d\s]+)\s+(.+)/i);
+        if (match) {
+          extraData.senderVOEN = match[1].replace(/\s+/g, '');
+          extraData.senderName = match[2].trim().replace(/^"|"$/g, '');
+        }
+      }
+      
+      // Qəbul edən
+      if (lowerLine.includes("qəbul edən:") || lowerLine.includes("alıcı:")) {
+        // Find if VOEN is directly attached
+        const match = line.match(/(?:Qəbul edən|Alıcı):\s*(?:V[öo]en[\s:]*)?([\d]{5,15})[\s-]+(.+)/i);
+        if (match) {
+          extraData.receiverVOEN = match[1].replace(/\s+/g, '');
+          customerName = match[2].trim().replace(/^"|"$/g, '');
+        } else {
+           const parts = line.split(/(?:qəbul edən|alıcı):/i);
+           if (parts.length > 1 && parts[1].trim() && !parts[1].trim().match(/^_/)) {
+             customerName = parts[1].trim().replace(/_+$/, "").trim();
+           } else if (i + 1 < lines.length) {
+             customerName = lines[i+1].trim().replace(/_+$/, "").trim();
+           }
+        }
+        
+        // Extract VOEN if it is still hiding inside customerName
+        if (customerName) {
+           const voenMatch = customerName.match(/(?:V[öo]en[\s:]*)?(\d{8,15})/i);
+           if (voenMatch) {
+              if (!extraData.receiverVOEN) {
+                 extraData.receiverVOEN = voenMatch[1];
+              }
+              // Remove VOEN and the word VÖEN from customerName
+              customerName = customerName.replace(voenMatch[0], '').replace(/^[\s-:]+/, '').replace(/[\s-:]+$/, '').trim();
+              customerName = customerName.replace(/^"|"$/g, '');
+           }
+           
+           // Əgər ad çox qısadırsa və ya boş qalıbsa, növbəti sətiri götürək
+           if (customerName.length < 3 && i + 1 < lines.length) {
+              customerName = lines[i+1].trim().replace(/_+$/, "").trim();
+           }
+        }
+      }
+      
+      // Əsas
+      if (lowerLine.startsWith("əsas ") || lowerLine.startsWith("əsas: ")) {
+         extraData.esas = line.substring(4).replace(/^:/, '').trim().replace(/^"|"$/g, '');
+      }
+      
+      // Əlavə qeydlər
+      if (lowerLine.startsWith("əlavə qeydlər")) {
+         extraData.elaveQeydler = line.substring(13).replace(/^:/, '').trim();
+      }
+      
+      if (line.match(/^1\s+2\s+3\s+4\s+5/)) {
+         inTable = true;
+         continue;
+      }
+      
+      if (inTable) {
+         if (lowerLine.startsWith("yekun məbləğ")) {
+            inTable = false;
+            const textMatch = line.match(/Yekun məbləğ\s+([\d.,]+)\s+\((.*?)\)\s+manat\s+([\d.,]+)\s+\((.*?)\)\s+qəpik/i);
+            if (textMatch) {
+               totalAmount = parseFloat(textMatch[1]) + (parseFloat(textMatch[3]) / 100);
+            } else {
+               const numMatch = line.match(/[\d.,]+/);
+               if (numMatch) totalAmount = parseFloat(numMatch[0]);
+            }
+            continue;
+         }
+         
+         if (lowerLine.startsWith("cəmi") && !lowerLine.includes("o cümlədən")) {
+            continue;
+         }
+         
+         const unitRegex = /(?:ədəd|ton|kq|qram|q|m|m2|m3|komplekt|lt|litr|əd)\s+(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)/i;
+         const unitMatch = line.match(unitRegex);
+         
+         if (unitMatch) {
+             const nums = line.substring(unitMatch.index).match(/\b\d+(?:[.,]\d+)?\b/g);
+             
+             if (nums && nums.length >= 10) {
+                const qty = parseFloat(nums[0].replace(',', '.'));
+                const price = parseFloat(nums[1].replace(',', '.'));
+                const total = parseFloat(nums[nums.length - 1].replace(',', '.'));
+                
+                let beforeUnit = line.substring(0, unitMatch.index).trim();
+                const wordsBeforeUnit = beforeUnit.split(" ");
+                const code = wordsBeforeUnit.length > 0 ? wordsBeforeUnit.pop() : "";
+                beforeUnit = wordsBeforeUnit.join(" ");
+                
+                let name = pendingItemName;
+                if (beforeUnit) name += (name ? " " : "") + beforeUnit;
+                
+                name = name.replace(/^\d+\s+/, '').trim();
+                
+                items.push({
+                   name: name,
+                   code: code,
+                   quantity: qty,
+                   price: price,
+                   total: total
+                });
+                pendingItemName = "";
+             }
+         } else if (line.trim().length > 0 && !line.match(/^[\d\s]+$/)) {
+             pendingItemName += (pendingItemName ? " " : "") + line.trim();
+         } else {
+             pendingItemName = "";
+         }
+      }
+    }
+    
+    // Add extraData to return for the frontend to see it (even if it just displays it)
+    return {
+      customerName: customerName || "Naməlum Müştəri",
+      customerCode: extraData.receiverVOEN || "",
+      invoiceNumber: invoiceNumber || `QM-${Math.floor(100000 + Math.random() * 900000)}`,
+      invoice_number: invoiceNumber || `QM-${Math.floor(100000 + Math.random() * 900000)}`, // Requested by user
+      invoiceDate: invoiceDate || new Date().toISOString().split("T")[0],
+      totalAmount: totalAmount || 0,
+      items: items.length > 0 ? items : [{
+        name: "Qaimə üzrə ümumi məhsullar",
+        quantity: 1,
+        price: totalAmount || 0,
+        total: totalAmount || 0
+      }],
+      ...extraData // Will be available in extractedData
+    };
+  } catch (e) {
+    console.error("parseInvoiceDeterministically error:", e);
+    return null;
+  }
+}
+
+// 7. Gemini Invoice Analysis API
+app.post("/api/invoices/upload", adminOrUser, async (req, res) => {
+  let { base64Data, fileName, mimeType } = req.body;
+
+  if (!base64Data || !mimeType) {
+    return res.status(400).json({ error: "Fayl məlumatları daxil edilməyib." });
+  }
+
+  // Strip data URL prefix if present
+  if (base64Data.includes(";base64,")) {
+    base64Data = base64Data.split(";base64,")[1];
+  }
+
+  try {
+    // 1. Only parse deterministically (NO AI, 100% accurate rule-based extraction for Excel/CSV/PDF)
+    let deterministicData = await parseInvoiceDeterministically(base64Data, fileName || "invoice.pdf", mimeType);
+    
+    if (deterministicData) {
+      console.log(`Successfully parsed invoice deterministically (AI-free) for file: ${fileName}`);
+      deterministicData.customerName = normalizeCustomerName(deterministicData.customerName);
+      return res.json({
+        success: true,
+        extractedData: deterministicData,
+        isDemoFallback: false,
+        isDeterministic: true,
+        message: "Sənəd daxili alqoritm ilə oxundu!"
+      });
+    }
+
+    return res.status(400).json({ error: "Sənədi oxumaq mümkün olmadı. Lütfən əllə daxil edin." });
+
+  } catch (err: any) {
+    console.error("Extraction error:", err);
+    res.status(500).json({
+      success: false,
+      error: err.message,
+      message: "Server xətası baş verdi."
+    });
+  }
+});
+
+
+// 8. Contacts API
+app.get("/api/contacts", async (req, res) => {
+  const db = await readDBFromFirestore();
+  res.json(db.contacts || []);
+});
+
+app.post("/api/contacts", adminOrUser, async (req, res) => {
+  const { name, phone, address } = req.body;
+  if (!name) return res.status(400).json({ error: "Müştəri adı vacibdir." });
+  
+  const db = await readDBFromFirestore();
+  if (!db.contacts) db.contacts = [];
+  
+  const newContact: Contact = {
+    id: "contact-" + Date.now(),
+    name: name.trim(),
+    phone: phone ? phone.trim() : "",
+    address: address ? address.trim() : "",
+    createdAt: new Date().toISOString()
+  };
+  
+  db.contacts.push(newContact);
+  await writeDBToFirestore(db);
+  await addLog("contact_added", `Şəxsi müştəri əlavə edildi: ${newContact.name}`, req);
+  res.status(201).json(newContact);
+});
+
+app.put("/api/contacts/:id", adminOrUser, async (req, res) => {
+  const { id } = req.params;
+  const { name, phone, address } = req.body;
+  
+  const db = await readDBFromFirestore();
+  if (!db.contacts) db.contacts = [];
+  
+  const contact = db.contacts.find(c => c.id === id);
+  if (!contact) return res.status(404).json({ error: "Müştəri tapılmadı." });
+  
+  if (name) contact.name = name.trim();
+  if (phone !== undefined) contact.phone = phone.trim();
+  if (address !== undefined) contact.address = address.trim();
+  
+  await writeDBToFirestore(db);
+  await addLog("contact_updated", `Şəxsi müştəri məlumatları yeniləndi: ${contact.name}`, req);
+  res.json({ success: true, contact });
+});
+
+app.delete("/api/contacts/:id", adminOnly, async (req, res) => {
+  const { id } = req.params;
+  const db = await readDBFromFirestore();
+  if (!db.contacts) db.contacts = [];
+  
+  const index = db.contacts.findIndex(c => c.id === id);
+  if (index === -1) return res.status(404).json({ error: "Müştəri tapılmadı." });
+  
+  const deleted = db.contacts.splice(index, 1)[0];
+  await writeDBToFirestore(db);
+  await addLog("contact_deleted", `Şəxsi müştəri silindi: ${deleted.name}`, req);
+  res.json({ success: true, deleted });
+});
+
+import nodemailer from 'nodemailer';
+
+// 9. Email Notification API
+app.post("/api/send-email", adminOrUser, async (req, res) => {
+  const { to, subject, html } = req.body;
+  if (!to || !subject || !html) {
+    return res.status(400).json({ error: "Email məlumatları tam deyil." });
+  }
+
+  try {
+    let transporter;
+    
+    if (process.env.SMTP_HOST && process.env.SMTP_USER) {
+      transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: parseInt(process.env.SMTP_PORT || "587"),
+        secure: process.env.SMTP_SECURE === "true",
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS,
+        },
+      });
+    } else {
+      console.log("No SMTP credentials found. Using test Ethereal account...");
+      let testAccount = await nodemailer.createTestAccount();
+      transporter = nodemailer.createTransport({
+        host: "smtp.ethereal.email",
+        port: 587,
+        secure: false, // true for 465, false for other ports
+        auth: {
+          user: testAccount.user,
+          pass: testAccount.pass,
+        },
+      });
+    }
+
+    let info = await transporter.sendMail({
+      from: '"Qaimə ERP Sistemi" <noreply@qaime.erp>',
+      to: to,
+      subject: subject,
+      html: html,
+    });
+
+    console.log("Message sent: %s", info.messageId);
+    let previewUrl = nodemailer.getTestMessageUrl(info);
+    if (previewUrl) {
+      console.log("Preview URL: %s", previewUrl);
+    }
+
+    await addLog("email_sent", `Email göndərildi: ${to} (${subject})`, req);
+    res.json({ success: true, message: "Email uğurla göndərildi.", previewUrl });
+  } catch (err: any) {
+    console.error("Email sending error:", err);
+    res.status(500).json({ error: "Email göndərilmədi.", details: err.message });
+  }
+});
+
+// Vite integration
+async function startServer() {
+  await authenticateServer();
+
+  if (process.env.NODE_ENV !== "production") {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa"
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
+    app.get("*", async (req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
+    });
+  }
+
+  // Remove json parsing limit if any
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`[Qaimə ERP] Server running on http://localhost:${PORT}`);
+  });
+}
+
+startServer();

@@ -1,0 +1,90 @@
+{
+  "entities": {
+    "Invoice": {
+      "title": "Invoice",
+      "description": "An invoice generated for a customer",
+      "type": "object",
+      "properties": {
+        "invoiceNumber": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerCode": { "type": "string" },
+        "invoiceDate": { "type": "string" },
+        "totalAmount": { "type": "number" },
+        "items": { "type": "array" },
+        "sourceFile": { "type": "string" },
+        "sourceFileType": { "type": "string" },
+        "extracted": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "status": { "type": "string" }
+      }
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "A customer of the business",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "code": { "type": "string" },
+        "createdAt": { "type": "string" }
+      }
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "A payment made by a customer",
+      "type": "object",
+      "properties": {
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "amount": { "type": "number" },
+        "paymentDate": { "type": "string" },
+        "note": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "invoiceId": { "type": "string" },
+        "invoiceNumber": { "type": "string" }
+      }
+    },
+    "User": {
+      "title": "User",
+      "description": "A user of the ERP system",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "role": { "type": "string" }
+      }
+    },
+    "Log": {
+      "title": "Log",
+      "description": "Action log in the ERP",
+      "type": "object",
+      "properties": {
+        "user": { "type": "string" },
+        "action": { "type": "string" },
+        "details": { "type": "string" },
+        "timestamp": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/invoices/{invoiceId}": {
+      "schema": { "$ref": "#/entities/Invoice" },
+      "description": "Invoices"
+    },
+    "/customers/{customerId}": {
+      "schema": { "$ref": "#/entities/Customer" },
+      "description": "Customers"
+    },
+    "/payments/{paymentId}": {
+      "schema": { "$ref": "#/entities/Payment" },
+      "description": "Payments"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Users"
+    },
+    "/logs/{logId}": {
+      "schema": { "$ref": "#/entities/Log" },
+      "description": "Activity logs"
+    }
+  }
+}

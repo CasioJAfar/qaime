@@ -1,0 +1,6 @@
+{
+  "name": "Star eQaimə",
+  "description": "PDF, Excel və şəkillərdən avtomatik məlumat çıxaran, müştəri borclarını və qaimələrini idarə edən müasir ERP sistemi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

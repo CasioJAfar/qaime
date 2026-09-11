@@ -1,0 +1,6 @@
+{
+  "firestore": {
+    "database": "ai-studio-qaimidaretmsiste-2c71db82-2fcd-4926-bda5-de60a591d778",
+    "rules": "firestore.rules"
+  }
+}
