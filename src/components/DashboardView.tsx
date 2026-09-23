@@ -9,7 +9,8 @@ import {
   Clock,
   ChevronRight,
   Package,
-  CheckSquare
+  CheckSquare,
+  Coins
 } from "lucide-react";
 import { 
   ResponsiveContainer, 
@@ -164,6 +165,9 @@ export default function DashboardView({ data, loading, onNavigate, onSelectInvoi
     );
   }
 
+  const mainDebt = (data.totalRemainingDebt || 0) / 1.18;
+  const edvDebt = ((data.totalRemainingDebt || 0) * 0.18) / 1.18;
+
   const kpis = [
     {
       title: "Ümumi Qaimə Sayı",
@@ -211,12 +215,25 @@ export default function DashboardView({ data, loading, onNavigate, onSelectInvoi
       onClick: () => onNavigate("debts")
     },
     {
+      title: "Əsas Borc",
+      value: formatAZN(mainDebt),
+      badge: "ƏDV-siz",
+      badgeColor: "bg-violet-100 text-violet-700 border-violet-200",
+      icon: Coins,
+      color: "bg-violet-50 text-violet-700 border-violet-100",
+      iconColor: "text-violet-700",
+      desc: "18% ƏDV çıxılmış təmiz borc",
+      onClick: () => onNavigate("debts")
+    },
+    {
       title: "Yığılmalı Məbləğ",
       value: formatAZN(data.totalRemainingDebt),
+      badge: "ƏDV Qarışıq",
+      badgeColor: "bg-rose-100 text-rose-700 border-rose-200",
       icon: Banknote,
       color: "bg-rose-50 text-rose-600 border-rose-100",
       iconColor: "text-rose-600",
-      desc: "Müştərilərin qalıq borcları",
+      desc: `ƏDV: ${formatAZN(edvDebt)} daxildir`,
       onClick: () => onNavigate("debts")
     }
   ];
@@ -275,27 +292,34 @@ export default function DashboardView({ data, loading, onNavigate, onSelectInvoi
       </div>
 
       {/* KPI Bento Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 md:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-4 md:gap-5">
         {kpis.map((kpi, idx) => {
           const Icon = kpi.icon;
           return (
             <div 
               key={idx}
               onClick={kpi.onClick}
-              className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-slate-300 transition duration-150 cursor-pointer group flex flex-col justify-between"
+              className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-xs hover:border-slate-300 hover:shadow-md transition duration-150 cursor-pointer group flex flex-col justify-between"
             >
               <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">{kpi.title}</p>
-                  <h3 className="text-3xl font-mono font-bold text-slate-800 mt-1">{kpi.value}</h3>
+                <div className="min-w-0 flex-1 pr-2">
+                  <div className="flex items-center space-x-1.5 mb-1 flex-wrap gap-y-1">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider truncate">{kpi.title}</p>
+                    {kpi.badge && (
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${kpi.badgeColor || "bg-slate-100 text-slate-600 border-slate-200"}`}>
+                        {kpi.badge}
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="text-xl sm:text-2xl font-mono font-bold text-slate-800 mt-1 tracking-tight truncate">{kpi.value}</h3>
                 </div>
-                <div className={`p-2.5 rounded-lg ${kpi.color} border transition duration-200 group-hover:scale-105`}>
+                <div className={`p-2.5 rounded-lg ${kpi.color} border transition duration-200 group-hover:scale-105 shrink-0`}>
                   <Icon className="w-5 h-5" />
                 </div>
               </div>
               <p className="text-[11px] text-slate-400 mt-3 border-t border-slate-100 pt-2.5 flex items-center justify-between">
-                <span>{kpi.desc}</span>
-                <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition duration-200" />
+                <span className="truncate pr-1">{kpi.desc}</span>
+                <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition duration-200 shrink-0" />
               </p>
             </div>
           );
@@ -385,7 +409,7 @@ export default function DashboardView({ data, loading, onNavigate, onSelectInvoi
 
               <div>
                 <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="text-slate-500 font-medium">Gözləyən Məbləğ (Borc)</span>
+                  <span className="text-slate-500 font-medium">Gözləyən Məbləğ (Cəmi Borc)</span>
                   <span className="font-bold text-rose-600">
                     {data.totalSales > 0 
                       ? `${Math.round((data.totalRemainingDebt / data.totalSales) * 100)}%`
@@ -403,6 +427,29 @@ export default function DashboardView({ data, loading, onNavigate, onSelectInvoi
                   ></div>
                 </div>
               </div>
+            </div>
+
+            {/* Qalıq Borc Bölgüsü: Əsas Borc və ƏDV Borcu */}
+            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/80 space-y-2">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+                <span>Qalıq Borc Bölgüsü</span>
+                <span className="text-[10px] text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 font-bold">
+                  {formatAZN(data.totalRemainingDebt)}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
+                <div className="bg-white p-2 rounded border border-slate-200">
+                  <span className="text-[10px] text-slate-400 block font-medium">Əsas Borc (ƏDV-siz):</span>
+                  <span className="font-mono font-bold text-violet-700 text-xs">{formatAZN(mainDebt)}</span>
+                </div>
+                <div className="bg-white p-2 rounded border border-slate-200">
+                  <span className="text-[10px] text-amber-600 block font-medium">ƏDV Borcu (18%):</span>
+                  <span className="font-mono font-bold text-amber-700 text-xs">{formatAZN(edvDebt)}</span>
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-400 leading-tight">
+                * Yığılmalı olan ümumi məbləğ 18% ƏDV qarışıqdır. Əsas borc isə ƏDV hesablanmadan təmiz borcdur.
+              </p>
             </div>
 
             <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-100 mt-2 space-y-2">

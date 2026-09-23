@@ -15,7 +15,9 @@ import {
   Trash2,
   Map as MapIcon,
   List,
-  Edit2
+  Edit2,
+  Calculator,
+  CheckSquare
 } from "lucide-react";
 import { Customer, Invoice} from "../types";
 import {
@@ -92,6 +94,9 @@ export default function CustomersView({
 
   // Custom inline deletion confirmation state
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  
+  // Selection state for calculating cumulative debt across selected customers
+  const [selectedCustomerIds, setSelectedCustomerIds] = useState<string[]>([]);
   
   // Search within selected customer's invoice ledger
   const [ledgerSearch, setLedgerSearch] = useState("");
@@ -264,9 +269,59 @@ export default function CustomersView({
     }
   };
 
-  const filteredCustomers = customers.filter(c => 
-    c.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredCustomers = customers.filter(c => {
+    const matchesSearch = c.name.toLowerCase().includes(search.toLowerCase()) || 
+      (c.code && c.code.toLowerCase().includes(search.toLowerCase()));
+    if (!matchesSearch) return false;
+    if (debtStatusFilter === "debtor") return c.debtAmount > 0.01;
+    if (debtStatusFilter === "clean") return c.debtAmount <= 0.01;
+    return true;
+  });
+
+  const toggleSelectCustomer = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setSelectedCustomerIds(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedCustomerIds.length === filteredCustomers.length && filteredCustomers.length > 0) {
+      setSelectedCustomerIds([]);
+    } else {
+      setSelectedCustomerIds(filteredCustomers.map(c => c.id));
+    }
+  };
+
+  const handleSelectOnlyDebtors = () => {
+    const debtorIds = filteredCustomers.filter(c => c.debtAmount > 0.01).map(c => c.id);
+    setSelectedCustomerIds(debtorIds);
+  };
+
+  const handleClearSelection = () => {
+    setSelectedCustomerIds([]);
+  };
+
+  // Cumulative financial metrics for selected customers
+  const selectedDebtStats = React.useMemo(() => {
+    const selectedList = customers.filter(c => selectedCustomerIds.includes(c.id));
+    const count = selectedList.length;
+    const totalDebt = selectedList.reduce((acc, c) => acc + (c.debtAmount || 0), 0);
+    const totalSales = selectedList.reduce((acc, c) => acc + (c.totalAmount || 0), 0);
+    const totalPaid = selectedList.reduce((acc, c) => acc + (c.paidAmount || 0), 0);
+    const mainDebt = totalDebt / 1.18;
+    const edvDebt = (totalDebt * 0.18) / 1.18;
+
+    return {
+      count,
+      totalDebt,
+      totalSales,
+      totalPaid,
+      mainDebt,
+      edvDebt,
+      selectedList
+    };
+  }, [customers, selectedCustomerIds]);
 
   return (
     <div className="flex-1 flex overflow-hidden bg-[#F8FAFC]">
@@ -328,10 +383,88 @@ export default function CustomersView({
                 <option value="clean">Borcu Olmayanlar</option>
               </select>
             </div>
-            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-              Cəmi: <span className="font-bold text-slate-950">{filteredCustomers.length}</span> müştəri tapıldı
+            <div className="flex items-center space-x-2">
+              <button
+                type="button"
+                onClick={handleSelectOnlyDebtors}
+                className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center space-x-1"
+                title="Yalnız borcu olan müştəriləri işarələ"
+              >
+                <span>Borcluları İşarələ</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleSelectAll}
+                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold transition cursor-pointer"
+              >
+                {selectedCustomerIds.length === filteredCustomers.length && filteredCustomers.length > 0
+                  ? "Seçimi Təmizlə"
+                  : "Hamısını İşarələ"}
+              </button>
+              <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider pl-1">
+                Cəmi: <span className="font-bold text-slate-950">{filteredCustomers.length}</span> müştəri
+              </div>
             </div>
           </div>
+
+          {/* Selected Customers Total Debt Cumulative Banner */}
+          {selectedDebtStats.count > 0 && (
+            <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-xl p-4 shadow-xl border border-indigo-500/30 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div className="flex items-start md:items-center space-x-3.5">
+                <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center shrink-0 shadow-inner">
+                  <Calculator className="w-5 h-5 text-indigo-300" />
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-indigo-300">
+                      İşarələnmiş Müştərilərin Borcu
+                    </span>
+                    <span className="bg-indigo-500/30 text-indigo-200 text-[11px] font-bold px-2 py-0.5 rounded-full border border-indigo-400/20">
+                      {selectedDebtStats.count} müştəri seçilib
+                    </span>
+                  </div>
+                  <div className="flex items-baseline space-x-2 mt-1">
+                    <span className="text-2xl md:text-3xl font-black text-rose-400 font-mono tracking-tight drop-shadow-xs">
+                      {formatAZN(selectedDebtStats.totalDebt)}
+                    </span>
+                    <span className="text-xs text-slate-300 font-medium">ümumi qalıq borc</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Detailed Breakdown */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs bg-slate-800/80 p-2.5 rounded-lg border border-slate-700">
+                <div className="bg-slate-900/40 p-2 rounded">
+                  <span className="text-[10px] text-slate-400 block font-medium">Əsas Borc (ƏDV-siz):</span>
+                  <span className="font-mono font-bold text-slate-200 text-xs">{formatAZN(selectedDebtStats.mainDebt)}</span>
+                </div>
+                <div className="bg-slate-900/40 p-2 rounded">
+                  <span className="text-[10px] text-amber-400 block font-medium">ƏDV Borcu (18%):</span>
+                  <span className="font-mono font-bold text-amber-300 text-xs">{formatAZN(selectedDebtStats.edvDebt)}</span>
+                </div>
+                <div className="bg-slate-900/40 p-2 rounded">
+                  <span className="text-[10px] text-slate-400 block font-medium">Cəmi Satış:</span>
+                  <span className="font-mono font-bold text-slate-200 text-xs">{formatAZN(selectedDebtStats.totalSales)}</span>
+                </div>
+                <div className="bg-slate-900/40 p-2 rounded">
+                  <span className="text-[10px] text-emerald-400 block font-medium">Ödənilmiş:</span>
+                  <span className="font-mono font-bold text-emerald-300 text-xs">{formatAZN(selectedDebtStats.totalPaid)}</span>
+                </div>
+              </div>
+
+              {/* Reset action */}
+              <div className="flex items-center space-x-2 shrink-0 self-end md:self-center">
+                <button
+                  type="button"
+                  onClick={handleClearSelection}
+                  className="px-3 py-2 text-xs font-semibold bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 rounded-lg border border-rose-500/30 transition cursor-pointer flex items-center space-x-1.5"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Seçimi Ləğv Et</span>
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="relative">
             {loading ? (
@@ -377,6 +510,20 @@ export default function CustomersView({
                   <table className="w-full text-left">
                     <thead className="sticky top-0 bg-white z-10 shadow-xs">
                       <tr className="bg-slate-50 text-[10px] text-slate-500 uppercase tracking-[0.1em] border-b border-slate-200">
+                        <th className="px-4 py-4 w-12 text-center">
+                          <input 
+                            type="checkbox"
+                            checked={filteredCustomers.length > 0 && selectedCustomerIds.length === filteredCustomers.length}
+                            ref={el => {
+                              if (el) {
+                                el.indeterminate = selectedCustomerIds.length > 0 && selectedCustomerIds.length < filteredCustomers.length;
+                              }
+                            }}
+                            onChange={handleSelectAll}
+                            className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                            title="Bütün müştəriləri seç / təmizlə"
+                          />
+                        </th>
                         <th className="px-6 py-4 font-semibold">Müştəri adı</th>
                         <th className="px-6 py-4 font-semibold text-center">Qaimə Sayı</th>
                         <th className="px-6 py-4 font-semibold text-right">Cəmi Satış</th>
@@ -390,14 +537,28 @@ export default function CustomersView({
                     <tbody className="divide-y divide-slate-100 text-slate-700">
                       {filteredCustomers.map((cust) => {
                         const hasDebt = cust.debtAmount > 0.01;
+                        const isSelected = selectedCustomerIds.includes(cust.id);
                         return (
                           <tr 
                             key={cust.id} 
                             onClick={() => setSelectedCustomer(cust)}
                             className={`hover:bg-indigo-50/30 transition duration-150 cursor-pointer ${
-                              selectedCustomer?.id === cust.id ? "bg-indigo-50/40" : ""
+                              isSelected 
+                                ? "bg-indigo-50/70 hover:bg-indigo-50/90" 
+                                : selectedCustomer?.id === cust.id 
+                                ? "bg-indigo-50/40" 
+                                : ""
                             }`}
                           >
+                            <td className="px-4 py-3.5 w-12 text-center" onClick={(e) => e.stopPropagation()}>
+                              <input 
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleSelectCustomer(cust.id)}
+                                className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                                title="İşarələ"
+                              />
+                            </td>
                             <td className="px-6 py-3.5">
                               <div className="flex items-center space-x-3">
                                 <div className="w-8 h-8 rounded bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-xs font-display shrink-0">
@@ -498,7 +659,7 @@ export default function CustomersView({
                       })}
                       {filteredCustomers.length === 0 && (
                         <tr>
-                          <td colSpan={6} className="py-12 text-center text-slate-400">
+                          <td colSpan={9} className="py-12 text-center text-slate-400">
                             Axtarışa uyğun heç bir müştəri tapılmadı.
                           </td>
                         </tr>
@@ -511,15 +672,29 @@ export default function CustomersView({
                 <div className="block md:hidden space-y-3">
                   {filteredCustomers.map((cust) => {
                     const hasDebt = cust.debtAmount > 0.01;
+                    const isSelected = selectedCustomerIds.includes(cust.id);
                     return (
                       <div 
                         key={cust.id}
                         onClick={() => setSelectedCustomer(cust)}
                         className={`bg-slate-50 p-4 rounded-xl border transition-all duration-150 cursor-pointer ${
-                          selectedCustomer?.id === cust.id ? "border-indigo-500 bg-indigo-50/20 shadow-xs" : "border-slate-150 hover:border-slate-200"
+                          isSelected 
+                            ? "border-indigo-500 bg-indigo-50/40 ring-2 ring-indigo-500/20 shadow-sm"
+                            : selectedCustomer?.id === cust.id 
+                            ? "border-indigo-500 bg-indigo-50/20 shadow-xs" 
+                            : "border-slate-150 hover:border-slate-200"
                         }`}
                       >
                         <div className="flex items-center space-x-3 mb-3">
+                          <div onClick={(e) => e.stopPropagation()} className="shrink-0 flex items-center pr-1">
+                            <input 
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleSelectCustomer(cust.id)}
+                              className="w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                              title="İşarələ"
+                            />
+                          </div>
                           <div className="w-8 h-8 rounded bg-indigo-500/10 text-indigo-700 flex items-center justify-center font-bold text-xs font-display shrink-0">
                             {cust.name.substring(0, 2).toUpperCase()}
                           </div>
@@ -635,6 +810,31 @@ export default function CustomersView({
             )}
           </div>
         </div>
+
+        {/* Mobile Floating Selection Pill when customers are selected */}
+        {selectedDebtStats.count > 0 && (
+          <div className="fixed bottom-20 left-3 right-3 z-30 md:hidden bg-slate-900/95 backdrop-blur-md text-white p-3 rounded-2xl shadow-2xl border border-indigo-500/40 flex items-center justify-between">
+            <div className="flex items-center space-x-3 min-w-0 flex-1">
+              <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center font-bold text-xs shrink-0 text-white shadow-md">
+                {selectedDebtStats.count}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] uppercase font-bold text-indigo-300 truncate">Seçilmiş Müştərilərin Borcu</p>
+                <p className="text-base font-black text-rose-400 font-mono leading-tight truncate">
+                  {formatAZN(selectedDebtStats.totalDebt)}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleClearSelection}
+              className="p-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs shrink-0 cursor-pointer ml-2"
+              title="Seçimi təmizlə"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Slide-out Panel: Detailed customer ledger cards */}

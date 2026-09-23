@@ -27,7 +27,14 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
         body: JSON.stringify({ username, password, deviceInfo }),
       });
 
-      const data = await res.json();
+      let data: any = {};
+      const responseText = await res.text();
+      try {
+        data = responseText ? JSON.parse(responseText) : {};
+      } catch (parseErr) {
+        throw new Error("Serverdən etibarlı cavab alınmadı. Əgər Render-də yerləşdirirsinizsə, tətbiqin 'Static Site' deyil, 'Web Service' (Node.js) olaraq qurulduğundan əmin olun.");
+      }
+
       if (!res.ok) {
         throw new Error(data.error || "Giriş uğursuz oldu.");
       }

@@ -182,14 +182,26 @@ export default function App() {
           fetch("/api/contacts")
         ]);
 
+        const parseSafeJSON = async (res: Response, endpoint: string) => {
+          const text = await res.text();
+          if (!text || text.trim().startsWith("<")) {
+            throw new Error(`Server cavabı etibarlı deyil (${endpoint}: ${res.status}).`);
+          }
+          try {
+            return JSON.parse(text);
+          } catch (e) {
+            throw new Error(`Məlumat oxunarkən xəta baş verdi (${endpoint}).`);
+          }
+        };
+
         if (!dashRes.ok || !invRes.ok || !custRes.ok || !contactsRes.ok) {
           throw new Error("Sistem verilənlərinin oxunmasında xəta baş verdi.");
         }
 
-        const dashData = await dashRes.json();
-        const invData = await invRes.json();
-        const custData = await custRes.json();
-        const contactsData = await contactsRes.json();
+        const dashData = await parseSafeJSON(dashRes, "Dashboard");
+        const invData = await parseSafeJSON(invRes, "Qaimələr");
+        const custData = await parseSafeJSON(custRes, "Müştərilər");
+        const contactsData = await parseSafeJSON(contactsRes, "Əlaqələr");
 
         setDashboardData(dashData);
         setInvoices(invData);
@@ -439,6 +451,7 @@ export default function App() {
               {activeTab === "profit" && currentUser.role !== "user" && currentUser.role !== "2" && (
                 <ProfitView 
                   invoices={invoices} 
+                  customers={customers}
                   currency={currency}
                   showToast={showToast}
                 />

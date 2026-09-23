@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { 
   LayoutDashboard, 
   FileText, 
@@ -10,8 +10,14 @@ import {
   LogOut,
   User,
   TrendingUp,
-  Book
+  Book,
+  Menu,
+  X,
+  Moon,
+  Sun,
+  ChevronRight
 } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 
 interface SidebarProps {
   activeTab: string;
@@ -21,7 +27,30 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ activeTab, setActiveTab, currentUser, onLogout }: SidebarProps) {
-  const menuItems = [
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains("dark"));
+
+  useEffect(() => {
+    const handleThemeCheck = () => {
+      setIsDark(document.documentElement.classList.contains("dark"));
+    };
+    handleThemeCheck();
+  }, []);
+
+  const toggleTheme = () => {
+    const nextDark = !document.documentElement.classList.contains("dark");
+    if (nextDark) {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("erp_theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("erp_theme", "light");
+    }
+    setIsDark(nextDark);
+  };
+
+  // Full list of menu items for desktop
+  const desktopMenuItems = [
     ...(currentUser?.role !== "2" ? [{ id: "dashboard", label: "Dashboard", icon: LayoutDashboard }] : []),
     { id: "invoices", label: "Qaimələr", icon: FileText },
     ...(currentUser?.role !== "2" ? [{ id: "customers", label: "Müştərilər", icon: Users }] : []),
@@ -32,6 +61,36 @@ export default function Sidebar({ activeTab, setActiveTab, currentUser, onLogout
     ...(currentUser?.role === "admin" ? [{ id: "admin_panel", label: "Admin Panel", icon: Shield }] : []),
     { id: "settings", label: "Ayarlar", icon: Settings },
   ];
+
+  // Mobile Bottom Bar primary items: exactly Dashboard, Qaimələr, Müştərilər, Borclar
+  const mobilePrimaryItems = [
+    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { id: "invoices", label: "Qaimələr", icon: FileText },
+    { id: "customers", label: "Müştərilər", icon: Users },
+    { id: "debts", label: "Borclar", icon: CreditCard },
+  ].filter(item => {
+    if (currentUser?.role === "2" && (item.id === "dashboard" || item.id === "customers")) {
+      return false;
+    }
+    return true;
+  });
+
+  // Mobile Drawer items: the remaining navigation items
+  const mobileSecondaryItems = [
+    { id: "reports", label: "Hesabatlar", icon: FileSpreadsheet },
+    ...(currentUser?.role !== "user" && currentUser?.role !== "2" ? [{ id: "profit", label: "Xərc və Mənfəət", icon: TrendingUp }] : []),
+    ...(currentUser?.role !== "user" ? [{ id: "contacts", label: "Müştəri məlumatları", icon: Book }] : []),
+    ...(currentUser?.role === "admin" ? [{ id: "admin_panel", label: "Admin Panel", icon: Shield }] : []),
+    { id: "settings", label: "Ayarlar", icon: Settings },
+  ];
+
+  // Check if activeTab is currently one of the secondary items in the drawer
+  const isSecondaryTabActive = mobileSecondaryItems.some(item => item.id === activeTab);
+
+  const handleMobileTabClick = (tabId: string) => {
+    setActiveTab(tabId);
+    setIsMobileMenuOpen(false);
+  };
 
   return (
     <>
@@ -50,7 +109,7 @@ export default function Sidebar({ activeTab, setActiveTab, currentUser, onLogout
 
         {/* Navigation Menu */}
         <nav className="flex-1 px-3 space-y-1 overflow-y-auto">
-          {menuItems.map((item) => {
+          {desktopMenuItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
@@ -85,20 +144,11 @@ export default function Sidebar({ activeTab, setActiveTab, currentUser, onLogout
               }</p>
             </div>
             <button 
-              onClick={() => {
-                const isDark = document.documentElement.classList.contains("dark");
-                if (isDark) {
-                  document.documentElement.classList.remove("dark");
-                  localStorage.setItem("erp_theme", "light");
-                } else {
-                  document.documentElement.classList.add("dark");
-                  localStorage.setItem("erp_theme", "dark");
-                }
-              }}
-              className="p-1.5 bg-slate-800 hover:bg-slate-700 rounded-md text-slate-400 hover:text-white transition cursor-pointer no-invert"
+              onClick={toggleTheme}
+              className="p-1.5 bg-slate-800 hover:bg-slate-700 rounded-md text-slate-400 hover:text-white transition cursor-pointer"
               title="Gecə/Gündüz Rejimi"
             >
-              <svg xmlns="http://www.03.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+              {isDark ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-slate-300" />}
             </button>
           </div>
 
@@ -112,33 +162,172 @@ export default function Sidebar({ activeTab, setActiveTab, currentUser, onLogout
         </div>
       </aside>
 
-      {/* Mobile Bottom Navigation Bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-[#1E293B] border-t border-[#334155] flex items-center justify-around px-1 z-40 shadow-xl overflow-x-auto whitespace-nowrap scrollbar-none print:hidden">
-        {menuItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = activeTab === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`flex flex-col items-center justify-center flex-1 min-w-[50px] h-full py-1 transition-all cursor-pointer ${
-                isActive ? "text-indigo-400" : "text-slate-400"
-              }`}
-            >
-              <Icon className="w-5 h-5 mb-0.5" />
-              <span className="text-[10px] font-medium truncate tracking-tight">{item.label}</span>
-            </button>
-          );
-        })}
-        {/* Mobile Logout Button */}
-        <button
-          onClick={onLogout}
-          className="flex flex-col items-center justify-center flex-1 min-w-[50px] h-full py-1 transition-all cursor-pointer text-rose-400 hover:text-rose-300"
-        >
-          <LogOut className="w-5 h-5 mb-0.5" />
-          <span className="text-[10px] font-medium truncate tracking-tight">Çıxış</span>
-        </button>
+      {/* Mobile Bottom Navigation Bar (4 Main Tabs + Menu) */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-[#1E293B] border-t border-[#334155] z-40 shadow-2xl px-2 print:hidden">
+        <div className="grid grid-cols-5 h-full max-w-md mx-auto items-center">
+          {/* Primary 4 Tabs */}
+          {mobilePrimaryItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                id={`mobile-tab-${item.id}`}
+                onClick={() => handleMobileTabClick(item.id)}
+                className={`flex flex-col items-center justify-center h-full py-1 transition-colors cursor-pointer relative ${
+                  isActive ? "text-indigo-400 font-semibold" : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                {isActive && (
+                  <span className="absolute top-0 w-8 h-1 bg-indigo-500 rounded-b-full"></span>
+                )}
+                <Icon className={`w-5 h-5 mb-0.5 ${isActive ? "text-indigo-400" : "text-slate-400"}`} />
+                <span className="text-[10px] tracking-tight truncate w-full text-center px-0.5">
+                  {item.label}
+                </span>
+              </button>
+            );
+          })}
+
+          {/* 5th Button: Menyu */}
+          <button
+            id="mobile-tab-menu"
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className={`flex flex-col items-center justify-center h-full py-1 transition-colors cursor-pointer relative ${
+              isMobileMenuOpen || isSecondaryTabActive ? "text-indigo-400 font-semibold" : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            {isSecondaryTabActive && (
+              <span className="absolute top-1 right-3 w-2 h-2 bg-indigo-400 rounded-full ring-2 ring-[#1E293B]"></span>
+            )}
+            {isMobileMenuOpen ? (
+              <X className="w-5 h-5 mb-0.5 text-indigo-400" />
+            ) : (
+              <Menu className="w-5 h-5 mb-0.5" />
+            )}
+            <span className="text-[10px] tracking-tight truncate w-full text-center px-0.5">
+              Menyu
+            </span>
+          </button>
+        </div>
       </nav>
+
+      {/* Mobile Menu Bottom Drawer / Modal */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="absolute inset-0 bg-slate-950/70 backdrop-blur-xs"
+            />
+
+            {/* Bottom Sheet Card */}
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 28, stiffness: 300 }}
+              className="relative w-full bg-[#1E293B] border-t border-[#334155] rounded-t-3xl shadow-2xl p-5 max-h-[85vh] overflow-y-auto flex flex-col space-y-4"
+            >
+              {/* Drag handle */}
+              <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto -mt-1 mb-1 shrink-0" />
+
+              {/* Drawer Header: User Info & Close */}
+              <div className="flex items-center justify-between pb-3 border-b border-slate-700/80">
+                <div className="flex items-center space-x-3">
+                  <div className="w-9 h-9 bg-indigo-600/30 border border-indigo-500/40 rounded-full flex items-center justify-center text-indigo-300 font-bold">
+                    <User className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white uppercase tracking-wide">
+                      {currentUser?.username}
+                    </h4>
+                    <p className="text-[11px] text-slate-400 font-medium">
+                      {currentUser?.role === "admin" ? "Yüksək Səlahiyyət (Admin)" : 
+                       currentUser?.role === "moderator" ? "Moderator" : "Oxucu"}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="p-1.5 rounded-full bg-slate-800 text-slate-400 hover:text-white border border-slate-700 cursor-pointer"
+                  title="Bağla"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Secondary Navigation List */}
+              <div className="space-y-1.5 py-1">
+                <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 px-2 mb-2">
+                  Digər Bölmələr
+                </p>
+                {mobileSecondaryItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = activeTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => handleMobileTabClick(item.id)}
+                      className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl transition-all cursor-pointer ${
+                        isActive 
+                          ? "bg-indigo-600 text-white font-semibold shadow-md" 
+                          : "bg-slate-800/60 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/50"
+                      }`}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <Icon className={`w-5 h-5 ${isActive ? "text-white" : "text-indigo-400"}`} />
+                        <span className="text-sm">{item.label}</span>
+                      </div>
+                      <ChevronRight className={`w-4 h-4 ${isActive ? "text-white" : "text-slate-500"}`} />
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Quick Actions (Dark Mode + Logout) */}
+              <div className="pt-2 border-t border-slate-700/80 space-y-2">
+                <button
+                  onClick={toggleTheme}
+                  className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-slate-800/40 hover:bg-slate-800 text-slate-300 border border-slate-700/40 transition cursor-pointer"
+                >
+                  <div className="flex items-center space-x-3">
+                    {isDark ? (
+                      <Sun className="w-4 h-4 text-amber-400" />
+                    ) : (
+                      <Moon className="w-4 h-4 text-slate-300" />
+                    )}
+                    <span className="text-xs font-medium">
+                      {isDark ? "Gündüz Rejiminə Keç" : "Gecə Rejiminə Keç"}
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-semibold text-slate-400 bg-slate-700/50 px-2 py-0.5 rounded">
+                    {isDark ? "Gecə" : "Gündüz"}
+                  </span>
+                </button>
+
+                {/* Mobile Logout Button */}
+                <button
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    onLogout();
+                  }}
+                  className="w-full flex items-center justify-center space-x-2 py-3 rounded-xl bg-rose-600/15 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 transition-all font-bold text-xs cursor-pointer shadow-xs"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Sistemdən Çıxış Et</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </>
   );
 }

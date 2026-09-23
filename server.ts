@@ -1,4 +1,4 @@
-import { authenticateServer, readDBFromFirestore, writeDBToFirestore } from "./src/db";
+import { authenticateServer, readDBFromFirestore, writeDBToFirestore, deleteInvoiceFileFromFirestore } from "./src/db";
 import express from "express";
 import path from "path";
 import fs from "fs";
@@ -6,6 +6,13 @@ import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 
 import { PDFParse } from "pdf-parse";
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled Rejection at:", promise, "reason:", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught Exception thrown:", err);
+});
 
 dotenv.config();
 
@@ -459,6 +466,9 @@ app.delete("/api/invoices/:id", adminOnly, async (req, res) => {
 
   const deleted = db.invoices.splice(index, 1)[0];
   await writeDBToFirestore(db);
+  if (id) {
+    await deleteInvoiceFileFromFirestore(id);
+  }
 
   await addLog("invoice_deleted", `Qaimə silindi: ${deleted.invoiceNumber} - ${deleted.customerName} (${deleted.totalAmount} AZN)`, req);
 
@@ -1206,6 +1216,15 @@ async function startServer() {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
+
+  // Global Express error handler to guarantee valid JSON responses
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error("Express global error handler caught:", err);
+    if (res.headersSent) {
+      return next(err);
+    }
+    res.status(500).json({ error: "Daxili server xətası baş verdi.", message: err?.message || "Xəta" });
+  });
 
   // Remove json parsing limit if any
   app.listen(PORT, "0.0.0.0", () => {
